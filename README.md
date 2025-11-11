@@ -4,9 +4,9 @@ Goal: a clear, visual demo of hybrid cryptography using RSA-OAEP (to move a symm
 
 This app is purposely local-only and classroom-focused. No servers, databases, or accounts. Just run and click through the steps.
 
-============================================================
-TL;DR (what to say in class)
-============================================================
+
+# TL;DR (what to say in class)
+
 - We generate RSA keys (signing + encryption) for Alice and Bob.
 - We bind each person’s encryption public key to their identity by signing its hash (prevents MITM swapping keys).
 - Alice makes a fresh AES key, wraps it to Bob using RSA-OAEP, then uses that AES key to encrypt the note with AES-GCM (nonce + ciphertext + tag + AAD).
@@ -14,9 +14,9 @@ TL;DR (what to say in class)
 - Bob verifies signature first (authenticity + integrity), then unwraps the AES key and decrypts.
 - Tamper toggles show verification or decryption failures instantly.
 
-============================================================
-1) Quick start
-============================================================
+
+# 1. Quick start
+
 Requirements
 - Python 3.10+ (3.11 recommended)
 - pip and a working venv
@@ -36,9 +36,9 @@ Install & run
 If cryptography fails to install on an older Python/pip, try:
     python -m pip install --upgrade pip setuptools wheel
 
-============================================================
-2) What’s in this repo
-============================================================
+
+# 2. What’s in this repo
+
 .
 ├─ app.py                 # Flask backend + cryptography logic (RSA-OAEP, RSA-PSS, AES-GCM)
 ├─ requirements.txt       # Flask + cryptography
@@ -48,9 +48,9 @@ If cryptography fails to install on an older Python/pip, try:
     ├─ styles.css         # Modern, compact styles (light/dark)
     └─ app.js             # Client-side logic, step-by-step controller, copy-to-clipboard, etc.
 
-============================================================
-3) The demo flow (what each step does)
-============================================================
+
+# 3. The demo flow (what each step does)
+
 1) Generate Keys
    - Each side creates two RSA-2048 keypairs:
      - Identity (RSA-PSS) for signing.
@@ -89,9 +89,9 @@ If cryptography fails to install on an older Python/pip, try:
    - Bob unwraps the AES key (RSA-OAEP) and decrypts the ciphertext with AES-GCM using the nonce and AAD.
    - If key/nonce/AAD/ciphertext are wrong, GCM rejects with an auth failure; otherwise, plaintext appears.
 
-============================================================
-4) UI map
-============================================================
+
+# 4. UI map
+
 Left column: Alice & Bob cards (encryption pubkeys + signatures), your Note input.
 Right column:
 - Step Explainer (plain bullets for each step).
@@ -106,18 +106,18 @@ Right column:
   - Signature — Alice’s RSA-PSS signature of that hash.
 - Tamper toggles: flip one byte in ciphertext or signature to observe failure modes.
 
-============================================================
-5) Crypto choices (short rationale)
-============================================================
+
+# 5. Crypto choices (short rationale)
+
 - RSA-OAEP-2048 (SHA-256/MGF1) for key transport: simple to teach and widely standardized.
 - AES-256-GCM for payload: AEAD gives confidentiality + integrity with a single API.
 - RSA-PSS (SHA-256, Prehashed) for signatures: modern RSA signature scheme; we show the exact digest we sign—great for learning.
 
 Out of scope (by design): PKI/certificates, persistent key storage, multiple messages per session, replay protection, network transport security (we’re local).
 
-============================================================
-6) API reference (for devs/debuggers)
-============================================================
+
+# 6. API reference (for devs/debuggers)
+
 - POST /api/generate → returns Alice/Bob signing and encryption pubkeys (SPKI base64).
 - POST /api/exchange → signs hash(encryption pubkey) with RSA-PSS; returns signatures and digests.
 - POST /api/derive → verifies those signatures, generates AES key, and returns:
@@ -134,9 +134,9 @@ Out of scope (by design): PKI/certificates, persistent key storage, multiple mes
 
 Canonical JSON: we always sign/verify sorted, compact JSON (sort_keys=True, separators=(",", ":")) to stay deterministic.
 
-============================================================
-7) Envelope format (example)
-============================================================
+
+# 7. Envelope format (example)
+
 {
   "v": "1",
   "alg": {
@@ -167,45 +167,45 @@ Canonical JSON: we always sign/verify sorted, compact JSON (sort_keys=True, sepa
 
 Note: in the UI we label shared_key_fingerprint as “AES key id (short hash)”, but it is not part of the envelope—just an artifact we display.
 
-============================================================
-8) How to present (speaker notes)
-============================================================
+
+# 8. How to present (speaker notes)
+
 - Why hybrid? Asymmetric (RSA) to securely move a random AES key; symmetric (AES-GCM) to efficiently encrypt data.
 - Why sign? We want to prove who sent the package and that nothing changed.
 - Tamper demo: flip a byte in the signature → Verify fails; flip a byte in ciphertext → Decrypt fails (GCM auth error).
 - Nonce reminder: must be unique per AES key. We generate a new random nonce on each encrypt.
 
-============================================================
-9) Troubleshooting
-============================================================
+
+# 9. Troubleshooting
+
 - Page loads but buttons do nothing → check the browser console; ensure app.py shows no errors; refresh.
 - “AES-GCM authentication failed” on Decrypt → expected if you toggled ciphertext tamper or changed AAD/nonce/key.
 - RSA generation seems slow → normal on some laptops. It’s local and one-time per run.
 - pip errors installing cryptography → upgrade pip, setuptools, wheel. Use Python ≥ 3.10.
 
-============================================================
-10) Testing checklist
-============================================================
+
+# 10. Testing checklist
+
 - Happy path: Run all steps → Verify ok → Decrypt shows plaintext.
 - Tamper signature: Toggle “Break signature” → Verify should fail.
 - Tamper ciphertext: Toggle “Tamper ciphertext” → Verify ok (signature remains unchanged), then Decrypt fails with GCM auth error.
 - Re-run: Click Restart or Reset; confirm new RSA keys and a new AES key id (short hash).
 
-============================================================
-11) Customize (optional)
-============================================================
+
+# 11. Customize (optional)
+
 - Rename “AES key id (short hash)” in the UI? Change only the <b> label in templates/index.html.
 - Show fewer artifacts for a cleaner screen? Remove their rows from index.html; the app logic keeps working.
 - Different AAD? In app.py → /api/encrypt, change aad = b"cmps380/context" (keep it consistent for decrypt).
 
-============================================================
-12) Why we don’t show identity fingerprints
-============================================================
+
+# 12. Why we don’t show identity fingerprints
+
 We removed identity “fingerprints” (short hashes of identity public keys) to match the lecture scope. The demo still binds each encryption key to an identity via a signature on its hash (that’s the important MITM protection for the transport key).
 
-============================================================
-13) Security notes (what this demo is / isn’t)
-============================================================
+
+# 13. Security notes (what this demo is / isn’t)
+
 Provides:
 - Confidentiality + integrity of the note (AES-GCM).
 - Authenticity + integrity of the envelope (RSA-PSS).
@@ -216,8 +216,8 @@ Not included:
 - Persistent keys/storage, revocation, multiple message sessions.
 - Full anti-replay (we include session_id + ts mostly for teaching).
 
-============================================================
-14) Credits & licenses
-============================================================
+
+# 14. Credits & licenses
+
 - Uses Python cryptography and Flask.
 - Designed for CMPS 380 teaching/demo use.
