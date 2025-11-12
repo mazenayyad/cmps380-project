@@ -1,16 +1,6 @@
-# Secure Document Exchange System — CMPS 380# Secure Document Exchange System — CMPS 380Secure Note Courier — Team README (Internal)
+# Secure Document Exchange System — CMPS 380 Secure File Courier — Team README (Internal)
 
-
-
-**Goal**: Visual demonstration of hybrid cryptography (RSA-OAEP + AES-GCM + RSA-PSS) applied to secure file transfer between two parties with real-time attack simulation.
-
-
-
-Local-only, classroom-focused. No servers or accounts required.**Goal**: Visual demonstration of hybrid cryptography (RSA-OAEP + AES-GCM + RSA-PSS) applied to secure file transfer between two parties with real-time attack simulation.Goal: a clear, visual demo of hybrid cryptography using RSA-OAEP (to move a symmetric key), AES-GCM (to encrypt the note), and RSA-PSS (to sign the “envelope” so the receiver can verify origin + integrity).
-
-
-
-
+**Goal**: Visual demonstration of hybrid cryptography (RSA-OAEP + AES-GCM + RSA-PSS) applied to secure file transfer between two parties with real-time attack simulation.Goal: a clear, visual demo of hybrid cryptography using RSA-OAEP (to move a symmetric key), AES-GCM (to encrypt the note), and RSA-PSS (to sign the “envelope” so the receiver can verify origin + integrity).
 
 ## What This Demo Does
 
@@ -18,54 +8,31 @@ Local-only, classroom-focused. No servers or accounts required.This app is purpo
 
 **Secure File Transfer**: Alice and Bob exchange files (1KB, 1MB, 10MB, or custom uploads) using production-grade cryptography.
 
-
-
 **Visual Step-by-Step Flow**: Every cryptographic operation is visualized clearly:
-
 - Key generation (RSA signing + encryption keys)
-
 - Public key exchange with identity binding
-
 - AES key generation and RSA-OAEP wrapping## What This Demo Does# TL;DR (what to say in class)
-
 - File encryption with AES-GCM
-
 - Digital signature with RSA-PSS
-
 - Transfer visualization with file state display
-
 - Signature verification and decryption**Secure File Transfer**: Alice and Bob exchange files (1KB, 1MB, 10MB, or custom uploads) using production-grade cryptography.- We generate RSA keys (signing + encryption) for Alice and Bob.
-
 - File integrity comparison
-
 - We bind each person’s encryption public key to their identity by signing its hash (prevents MITM swapping keys).
 
 **Attack Defense Demonstrations**: Mid-transfer "Intercept" button allows real-time simulation of:
-
 - Man-in-the-Middle (MITM) attacks**Visual Step-by-Step Flow**: Every cryptographic operation is visualized clearly:- Alice makes a fresh AES key, wraps it to Bob using RSA-OAEP, then uses that AES key to encrypt the note with AES-GCM (nonce + ciphertext + tag + AAD).
-
 - Replay attacks
-
 - Timing attacks- Key generation (RSA signing + encryption keys)- Alice signs the whole envelope (JSON with wrapped key + ciphertext + etc.) using RSA-PSS over SHA-256 of the envelope.
-
 - Tampering attempts
-
 - Public key exchange with identity binding- Bob verifies signature first (authenticity + integrity), then unwraps the AES key and decrypts.
 
 All attacks are defeated by the cryptographic protocol, proving security.
-
 - AES key generation and RSA-OAEP wrapping- Tamper toggles show verification or decryption failures instantly.
 
 
 
 ## Quick Start- File encryption with AES-GCM
-
-
-
 **Requirements**: Python 3.10+, pip- Digital signature with RSA-PSS
-
-
-
 **Install & Run**:- Transfer visualization with file state display# 1. Quick start
 
 ```bash
