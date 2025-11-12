@@ -1,10 +1,4 @@
-I created your README as a **.txt** file with Markdown formatting.
 
-**[Download README.txt](sandbox:/mnt/data/README.txt)**
-
----
-
-````markdown
 # Secure Document Exchange (Alice ↔ Bob) — README
 
 Course: **Cybersecurity Fundamentals**  
@@ -172,5 +166,4 @@ Defaults: backend at `http://localhost:8000`, frontend at `http://localhost:5173
 * RFC 8439 — *ChaCha20 and Poly1305 for IETF Protocols*
 * NIST SP 800‑38D — *Galois/Counter Mode (GCM)*
 
-```
-```
+
