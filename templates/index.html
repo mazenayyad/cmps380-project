@@ -211,7 +211,7 @@
                         
                         <div class="binding-visualization">
                             <!-- Step 1: Take Public Key -->
-                            <div class="binding-step">
+                            <div class="binding-step visible-stage" data-stage="0">
                                 <div class="step-icon">🔓</div>
                                 <h4>Encryption Public Key</h4>
                                 <div class="key-preview" id="alice-pub-key-preview">
@@ -221,10 +221,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 </div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Step 2: Hash It -->
-                            <div class="binding-step highlighted">
+                            <div class="binding-step highlighted" data-stage="1">
                                 <div class="step-icon">🔢</div>
                                 <h4>Apply SHA-256 Hash Function</h4>
                                 <div class="hash-visualization">
@@ -235,10 +233,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 <div class="hash-result" id="alice-key-hash"></div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Step 3: Sign It -->
-                            <div class="binding-step highlighted">
+                            <div class="binding-step highlighted" data-stage="2">
                                 <div class="step-icon">✍️</div>
                                 <h4>Sign with Private Signing Key (RSA-PSS)</h4>
                                 <div class="signing-visualization">
@@ -257,10 +253,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 <div class="signature-result" id="alice-signature"></div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Final Package -->
-                            <div class="binding-step success">
+                            <div class="binding-step success" data-stage="3">
                                 <div class="step-icon">📦</div>
                                 <h4>Signed Public Key Package</h4>
                                 <div class="package-contents">
@@ -296,7 +290,7 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                         
                         <div class="binding-visualization">
                             <!-- Step 1: Take Public Key -->
-                            <div class="binding-step">
+                            <div class="binding-step visible-stage" data-stage="0">
                                 <div class="step-icon">🔓</div>
                                 <h4>Encryption Public Key</h4>
                                 <div class="key-preview" id="bob-pub-key-preview">
@@ -306,10 +300,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 </div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Step 2: Hash It -->
-                            <div class="binding-step highlighted">
+                            <div class="binding-step highlighted" data-stage="1">
                                 <div class="step-icon">🔢</div>
                                 <h4>Apply SHA-256 Hash Function</h4>
                                 <div class="hash-visualization">
@@ -320,10 +312,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 <div class="hash-result" id="bob-key-hash"></div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Step 3: Sign It -->
-                            <div class="binding-step highlighted">
+                            <div class="binding-step highlighted" data-stage="2">
                                 <div class="step-icon">✍️</div>
                                 <h4>Sign with Private Signing Key (RSA-PSS)</h4>
                                 <div class="signing-visualization">
@@ -342,10 +332,8 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                 <div class="signature-result" id="bob-signature"></div>
                             </div>
                             
-                            <div class="arrow-down">↓</div>
-                            
                             <!-- Final Package -->
-                            <div class="binding-step success">
+                            <div class="binding-step success" data-stage="3">
                                 <div class="step-icon">📦</div>
                                 <h4>Signed Public Key Package</h4>
                                 <div class="package-contents">
@@ -362,6 +350,18 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                             </div>
                         </div>
                     </div>
+                </div>
+                
+                <div class="binding-stage-controls">
+                    <button type="button" class="binding-stage-arrow" id="binding-stage-prev" aria-label="Show previous binding step">
+                        ←
+                    </button>
+                    <div class="binding-stage-indicator" id="binding-stage-indicator">
+                        Stage 1 of 4 · Encryption Public Key
+                    </div>
+                    <button type="button" class="binding-stage-arrow" id="binding-stage-next" aria-label="Show next binding step">
+                        →
+                    </button>
                 </div>
                 
                 <!-- Verification Summary -->

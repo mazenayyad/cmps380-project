@@ -530,11 +530,16 @@ body {
 }
 
 .binding-step {
+    display: none;
     background: var(--background);
     border-radius: 12px;
     padding: 20px;
     border: 2px solid var(--border);
     transition: var(--transition);
+}
+
+.binding-step.visible-stage {
+    display: block;
 }
 
 .binding-step.highlighted {
@@ -558,6 +563,46 @@ body {
     font-size: 1rem;
     margin-bottom: 15px;
     color: var(--text-primary);
+}
+
+.binding-stage-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin: 10px 0 30px;
+}
+
+.binding-stage-indicator {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.binding-stage-arrow {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 1.6rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    box-shadow: 0 10px 25px rgba(79, 70, 229, 0.3);
+}
+
+.binding-stage-arrow:hover {
+    transform: translateX(5px) scale(1.05);
+    box-shadow: 0 15px 35px rgba(79, 70, 229, 0.4);
+}
+
+.binding-stage-arrow:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 3px;
 }
 
 .key-preview {

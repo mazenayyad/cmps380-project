@@ -1,6 +1,7 @@
 // Global State Management
 const state = {
     currentStep: 0,
+    bindingStage: 0,
     selectedFile: null,
     selectedFileOwner: null,
     sender: 'alice',
@@ -20,10 +21,18 @@ const state = {
     customFile: null
 };
 
+const bindingStageLabels = [
+    'Encryption Public Key',
+    'Apply SHA-256 Hash Function',
+    'Sign with Private Signing Key (RSA-PSS)',
+    'Signed Public Key Package'
+];
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     updateProgressStepper();
+    setupBindingStageControls();
 });
 
 // Event Listeners
@@ -59,6 +68,48 @@ function initializeEventListeners() {
     document.querySelectorAll('.attack-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', handleAttackToggle);
     });
+}
+
+function setupBindingStageControls() {
+    const prevBtn = document.getElementById('binding-stage-prev');
+    const nextBtn = document.getElementById('binding-stage-next');
+    
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            const prevStage = (state.bindingStage - 1 + bindingStageLabels.length) % bindingStageLabels.length;
+            setBindingStage(prevStage);
+        });
+    }
+    
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            const nextStage = (state.bindingStage + 1) % bindingStageLabels.length;
+            setBindingStage(nextStage);
+        });
+    }
+    setBindingStage(0);
+}
+
+function setBindingStage(stageIndex) {
+    if (stageIndex < 0 || stageIndex >= bindingStageLabels.length) {
+        stageIndex = 0;
+    }
+    state.bindingStage = stageIndex;
+    
+    document.querySelectorAll('.binding-step').forEach(step => {
+        const stage = parseInt(step.dataset.stage, 10);
+        if (Number.isNaN(stage)) return;
+        if (stage === state.bindingStage) {
+            step.classList.add('visible-stage');
+        } else {
+            step.classList.remove('visible-stage');
+        }
+    });
+    
+    const indicator = document.getElementById('binding-stage-indicator');
+    if (indicator) {
+        indicator.textContent = `Stage ${stageIndex + 1} of ${bindingStageLabels.length} · ${bindingStageLabels[stageIndex]}`;
+    }
 }
 
 // File Selection
@@ -272,6 +323,7 @@ function toggleKeyVisibility(element) {
 // Step 2: Exchange and Bind Keys
 async function exchangeAndBindKeys() {
     try {
+        setBindingStage(0);
         // Update Alice's public key preview
         document.getElementById('alice-pub-key-preview').querySelector('code').textContent = 
             truncateKeyForPreview(state.keys.alice.encryption_public);
