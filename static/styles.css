@@ -786,6 +786,16 @@ body {
     margin: 0 auto;
 }
 
+.verify-box-v2.pending {
+    background: var(--surface-light);
+    box-shadow: 0 5px 20px rgba(15, 23, 42, 0.4);
+}
+
+.verify-box-v2.error {
+    background: var(--danger-color);
+    box-shadow: 0 5px 20px rgba(239, 68, 68, 0.4);
+}
+
 .verify-icon-large {
     font-size: 3rem;
     margin-bottom: 15px;
@@ -1347,6 +1357,56 @@ body {
 }
 
 /* Step 7: Verification */
+.envelope-import {
+    background: var(--surface-light);
+    border-radius: 15px;
+    padding: 20px 25px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.envelope-import h3 {
+    margin-bottom: 5px;
+}
+
+.envelope-import code {
+    background: var(--background);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.import-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    width: fit-content;
+    box-shadow: 0 5px 20px rgba(79, 70, 229, 0.35);
+}
+
+.import-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(79, 70, 229, 0.45);
+}
+
+.import-btn input[type="file"] {
+    display: none;
+}
+
+.import-status {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
 .verification-container {
     display: flex;
     flex-direction: column;
@@ -1404,6 +1464,10 @@ body {
     border-radius: 10px;
     padding: 20px;
     margin-top: 15px;
+}
+
+.verification-result.error {
+    background: rgba(239, 68, 68, 0.2);
 }
 
 .verify-status {
@@ -1514,6 +1578,33 @@ body {
     text-align: center;
     font-size: 1.2rem;
     margin-bottom: 20px;
+}
+
+.download-btn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
+}
+
+.download-btn:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(15, 23, 42, 0.4);
+}
+
+.download-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
 }
 
 /* Step 9: Integrity Check */

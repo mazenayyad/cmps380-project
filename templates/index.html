@@ -366,10 +366,10 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                 
                 <!-- Verification Summary -->
                 <div class="verification-status">
-                    <div class="verify-box-v2">
-                        <div class="verify-icon-large">✅</div>
-                        <h3>Keys Successfully Bound & Verified</h3>
-                        <p class="verify-explanation">Both parties can now verify the authenticity of each other's public keys by checking the digital signatures. This cryptographically binds the keys to their identities and prevents Man-in-the-Middle attacks.</p>
+                    <div class="verify-box-v2 pending" id="binding-verify-box">
+                        <div class="verify-icon-large" id="binding-verify-icon">⏳</div>
+                        <h3 id="binding-verify-title">Awaiting Verification</h3>
+                        <p class="verify-explanation" id="binding-verify-description">Once both parties sign each other's encryption public keys, we will run RSA-PSS verification to confirm authenticity.</p>
                     </div>
                 </div>
                 
@@ -532,6 +532,9 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                     <div class="signing-result">
                         <h3>✅ Signed Envelope Ready for Transfer</h3>
                         <p>Contains: Wrapped Key + Ciphertext + Tag + Nonce + Metadata + Signature</p>
+                        <button type="button" class="download-btn" id="download-envelope-btn">
+                            ⬇ Download Signed Envelope (JSON)
+                        </button>
                     </div>
                 </div>
                 <div class="step-navigation">
@@ -583,6 +586,17 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                 <div class="step-header">
                     <h2>Step 7: Verify Digital Signature</h2>
                     <p>Receiver verifies the envelope's signature to confirm authenticity and integrity</p>
+                </div>
+                <div class="envelope-import">
+                    <div>
+                        <h3>Import Signed Envelope</h3>
+                        <p>Upload a <code>.json</code> envelope to verify and decrypt it locally.</p>
+                    </div>
+                    <label class="import-btn">
+                        ⬆ Upload Envelope JSON
+                        <input type="file" id="envelope-import-input" accept="application/json">
+                    </label>
+                    <p class="import-status" id="import-envelope-status">No envelope loaded</p>
                 </div>
                 <div class="verification-container">
                     <div class="verify-flow">
@@ -665,6 +679,9 @@ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
                                         <p class="file-name-large" id="decrypted-filename"></p>
                                         <p class="file-size-large" id="decrypted-filesize"></p>
                                     </div>
+                                    <button type="button" class="download-btn" id="download-decrypted-btn" disabled>
+                                        ⬇ Download Decrypted File
+                                    </button>
                                 </div>
                             </div>
                         </div>

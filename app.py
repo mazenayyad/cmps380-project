@@ -27,6 +27,9 @@ keys_store = {
 # Sample files storage
 sample_files = {}
 
+# Track nonces that have already been used during decryption to prevent replays
+used_nonces = set()
+
 
 def generate_rsa_keypair(key_type='signing'):
     """Generate RSA-2048 keypair for signing or encryption"""
@@ -351,8 +354,16 @@ def decrypt_file():
             )
         )
         
-        # Decrypt with AES-GCM
-        nonce = base64.b64decode(envelope['nonce'])
+        # Decrypt with AES-GCM and enforce nonce replay protection
+        nonce_b64 = envelope['nonce']
+        if nonce_b64 in used_nonces:
+            return jsonify({
+                'success': False,
+                'error': 'Replay detected: nonce already used'
+            }), 400
+        used_nonces.add(nonce_b64)
+        
+        nonce = base64.b64decode(nonce_b64)
         ciphertext_only = base64.b64decode(envelope['ciphertext'])
         tag = base64.b64decode(envelope['tag'])
         aad = base64.b64decode(envelope['aad'])

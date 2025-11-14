@@ -13,6 +13,16 @@ const state = {
     envelope: null,
     originalHash: null,
     decryptedHash: null,
+    decryptedContent: null,
+    decryptedFilename: null,
+    bindingSignatures: {
+        alice: null,
+        bob: null
+    },
+    bindingVerification: {
+        alice: null,
+        bob: null
+    },
     timings: {
         encryption: 0,
         verification: 0,
@@ -33,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     updateProgressStepper();
     setupBindingStageControls();
+    updateBindingVerificationUI();
 });
 
 // Event Listeners
@@ -68,6 +79,21 @@ function initializeEventListeners() {
     document.querySelectorAll('.attack-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', handleAttackToggle);
     });
+    
+    const envelopeDownloadBtn = document.getElementById('download-envelope-btn');
+    if (envelopeDownloadBtn) {
+        envelopeDownloadBtn.addEventListener('click', downloadEnvelope);
+    }
+    
+    const envelopeImportInput = document.getElementById('envelope-import-input');
+    if (envelopeImportInput) {
+        envelopeImportInput.addEventListener('change', handleEnvelopeImport);
+    }
+    
+    const downloadBtn = document.getElementById('download-decrypted-btn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', downloadDecryptedFile);
+    }
 }
 
 function setupBindingStageControls() {
@@ -324,6 +350,12 @@ function toggleKeyVisibility(element) {
 async function exchangeAndBindKeys() {
     try {
         setBindingStage(0);
+        state.bindingSignatures.alice = null;
+        state.bindingSignatures.bob = null;
+        state.bindingVerification.alice = null;
+        state.bindingVerification.bob = null;
+        updateBindingVerificationUI();
+        
         // Update Alice's public key preview
         document.getElementById('alice-pub-key-preview').querySelector('code').textContent = 
             truncateKeyForPreview(state.keys.alice.encryption_public);
@@ -335,6 +367,7 @@ async function exchangeAndBindKeys() {
             body: JSON.stringify({ party: 'alice' })
         });
         const aliceBindData = await aliceBindResponse.json();
+        state.bindingSignatures.alice = aliceBindData.signature;
         
         // Display Alice's binding with animation
         await delay(300);
@@ -359,6 +392,7 @@ async function exchangeAndBindKeys() {
             body: JSON.stringify({ party: 'bob' })
         });
         const bobBindData = await bobBindResponse.json();
+        state.bindingSignatures.bob = bobBindData.signature;
         
         // Display Bob's binding with animation
         await delay(300);
@@ -391,9 +425,73 @@ function truncateKeyForPreview(key) {
 
 // Verify Key Bindings
 async function verifyKeyBindings() {
-    // In a real scenario, each party would verify the other's binding
-    // For demo purposes, we'll show successful verification
-    await delay(500);
+    if (!state.bindingSignatures.alice || !state.bindingSignatures.bob) {
+        state.bindingVerification.alice = null;
+        state.bindingVerification.bob = null;
+        updateBindingVerificationUI();
+        return;
+    }
+    
+    // Show pending status while verification runs
+    state.bindingVerification.alice = null;
+    state.bindingVerification.bob = null;
+    updateBindingVerificationUI();
+    
+    const [aliceResult, bobResult] = await Promise.all([
+        verifyBindingWithServer('alice', state.bindingSignatures.bob),
+        verifyBindingWithServer('bob', state.bindingSignatures.alice)
+    ]);
+    
+    state.bindingVerification.alice = aliceResult;
+    state.bindingVerification.bob = bobResult;
+    updateBindingVerificationUI();
+}
+
+async function verifyBindingWithServer(party, signature) {
+    if (!signature) return false;
+    
+    try {
+        const response = await fetch('/api/verify-binding', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ party, signature })
+        });
+        
+        const data = await response.json();
+        return data.success && data.verified;
+    } catch (error) {
+        console.error('Error verifying binding:', error);
+        return false;
+    }
+}
+
+function updateBindingVerificationUI() {
+    const box = document.getElementById('binding-verify-box');
+    if (!box) return;
+    
+    const icon = document.getElementById('binding-verify-icon');
+    const title = document.getElementById('binding-verify-title');
+    const description = document.getElementById('binding-verify-description');
+    const aliceStatus = state.bindingVerification.alice;
+    const bobStatus = state.bindingVerification.bob;
+    
+    box.classList.remove('pending', 'error');
+    
+    if (aliceStatus === true && bobStatus === true) {
+        icon.textContent = '✅';
+        title.textContent = 'Keys Successfully Bound & Verified';
+        description.textContent = 'Both parties validated each other\'s encryption public keys using RSA-PSS signatures. Man-in-the-Middle attacks are prevented.';
+    } else if (aliceStatus === false || bobStatus === false) {
+        box.classList.add('error');
+        icon.textContent = '⚠️';
+        title.textContent = 'Verification Failed';
+        description.textContent = 'One or both digital signatures failed verification. Regenerate keys and retry to ensure authenticity.';
+    } else {
+        box.classList.add('pending');
+        icon.textContent = '⏳';
+        title.textContent = 'Awaiting Verification';
+        description.textContent = 'Waiting for both binding signatures so we can run RSA-PSS verification for Alice and Bob.';
+    }
 }
 
 // Step 3: Encrypt File
@@ -492,6 +590,26 @@ function displaySigning() {
     document.getElementById('envelope-signature').textContent = truncateHash(state.envelope.signature);
 }
 
+function downloadEnvelope() {
+    if (!state.envelope) {
+        alert('Envelope not available yet. Complete previous steps first.');
+        return;
+    }
+    
+    const envelopeJson = JSON.stringify(state.envelope, null, 2);
+    const blob = new Blob([envelopeJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const filenameBase = (state.envelope.filename || 'envelope').replace(/\s+/g, '_');
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filenameBase}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 // Step 6: Transfer Animation
 function startTransferAnimation() {
     // Update transfer visualization
@@ -534,12 +652,28 @@ async function verifySignature() {
         
         if (data.success && data.verified) {
             state.timings.verification = data.verification_time;
-            document.getElementById('verify-time').textContent = formatTime(data.verification_time);
+            const verificationResult = document.getElementById('verification-result');
+            if (verificationResult) {
+                verificationResult.classList.remove('error');
+                verificationResult.innerHTML = `
+                    <span class="verify-status">✅ VERIFIED</span>
+                    <p>Signature is valid - envelope has not been tampered with</p>
+                    <p>Time: <span id="verify-time"></span></p>
+                `;
+            }
+            const verifyTimeElem = document.getElementById('verify-time');
+            if (verifyTimeElem) {
+                verifyTimeElem.textContent = formatTime(data.verification_time);
+            }
         } else {
-            document.querySelector('.verification-result').innerHTML = `
-                <span class="verify-status" style="background: var(--danger-color);">❌ VERIFICATION FAILED</span>
-                <p>Signature is invalid - envelope may have been tampered with</p>
-            `;
+            const verificationResult = document.getElementById('verification-result');
+            if (verificationResult) {
+                verificationResult.classList.add('error');
+                verificationResult.innerHTML = `
+                    <span class="verify-status" style="background: var(--danger-color);">❌ VERIFICATION FAILED</span>
+                    <p>Signature is invalid - envelope may have been tampered with</p>
+                `;
+            }
         }
         
     } catch (error) {
@@ -557,6 +691,13 @@ async function decryptFile() {
         document.getElementById('decrypt-nonce').textContent = truncateHash(state.envelope.nonce);
         document.getElementById('decrypt-tag').textContent = truncateHash(state.envelope.tag);
         
+        const downloadBtn = document.getElementById('download-decrypted-btn');
+        if (downloadBtn) {
+            downloadBtn.disabled = true;
+        }
+        state.decryptedContent = null;
+        state.decryptedFilename = null;
+        
         // Decrypt file
         const response = await fetch('/api/decrypt-file', {
             method: 'POST',
@@ -568,6 +709,8 @@ async function decryptFile() {
         
         if (data.success) {
             state.decryptedHash = data.decrypted_hash;
+            state.decryptedContent = data.content;
+            state.decryptedFilename = data.filename;
             state.timings.decryption = data.decryption_time;
             
             // Update display
@@ -575,13 +718,117 @@ async function decryptFile() {
             document.getElementById('decrypt-time').textContent = formatTime(data.decryption_time);
             document.getElementById('decrypted-filename').textContent = data.filename;
             document.getElementById('decrypted-filesize').textContent = formatFileSize(data.size);
+            
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+            }
         } else {
-            throw new Error(data.error);
+            throw new Error(data.error || 'Decryption failed');
         }
         
     } catch (error) {
         console.error('Error decrypting file:', error);
-        alert('Failed to decrypt file. Please try again.');
+        alert(error?.message ? `Decryption failed: ${error.message}` : 'Decryption failed. Please try again.');
+    }
+}
+
+async function handleEnvelopeImport(event) {
+    const fileInput = event.target;
+    const file = fileInput.files[0];
+    const statusElem = document.getElementById('import-envelope-status');
+    
+    if (!file) return;
+    if (statusElem) {
+        statusElem.textContent = `Loading ${file.name}...`;
+    }
+    
+    const reader = new FileReader();
+    reader.onerror = () => {
+        if (statusElem) statusElem.textContent = 'Failed to read file';
+        alert('Unable to read the selected file.');
+        fileInput.value = '';
+    };
+    
+    reader.onload = async (loadEvent) => {
+        try {
+            const importedEnvelope = JSON.parse(loadEvent.target.result);
+            if (!isValidEnvelope(importedEnvelope)) {
+                throw new Error('Invalid envelope structure');
+            }
+            
+            state.envelope = importedEnvelope;
+            if (importedEnvelope.sender && typeof importedEnvelope.sender === 'string') {
+                state.sender = importedEnvelope.sender.toLowerCase();
+            }
+            if (importedEnvelope.receiver && typeof importedEnvelope.receiver === 'string') {
+                state.receiver = importedEnvelope.receiver.toLowerCase();
+            }
+            state.originalHash = null;
+            state.decryptedHash = null;
+            state.decryptedContent = null;
+            state.decryptedFilename = null;
+            
+            if (statusElem) {
+                statusElem.textContent = `Loaded ${file.name}`;
+            }
+            
+            await verifySignature();
+            await decryptFile();
+        } catch (error) {
+            console.error('Error importing envelope:', error);
+            if (statusElem) statusElem.textContent = 'Failed to load envelope';
+            alert('Unable to import envelope JSON. Please ensure it matches the expected format.');
+        } finally {
+            fileInput.value = '';
+        }
+    };
+    
+    reader.readAsText(file);
+}
+
+function isValidEnvelope(envelope) {
+    if (!envelope || typeof envelope !== 'object') return false;
+    const stringFields = ['wrapped_key', 'nonce', 'ciphertext', 'tag', 'aad', 'signature'];
+    if (!stringFields.every(field => typeof envelope[field] === 'string' && envelope[field].length > 0)) {
+        return false;
+    }
+    if (typeof envelope.filename !== 'string') return false;
+    if (typeof envelope.size !== 'number') return false;
+    return true;
+}
+
+function downloadDecryptedFile() {
+    if (!state.decryptedContent) {
+        alert('Decrypted file not available yet. Complete Step 8 first.');
+        return;
+    }
+    
+    try {
+        const byteCharacters = atob(state.decryptedContent);
+        const sliceSize = 1024;
+        const byteArrays = [];
+        
+        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            const slice = byteCharacters.slice(offset, offset + sliceSize);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            byteArrays.push(new Uint8Array(byteNumbers));
+        }
+        
+        const blob = new Blob(byteArrays, { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = state.decryptedFilename || state.envelope?.filename || 'decrypted-file';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Error downloading decrypted file:', error);
+        alert('Unable to download decrypted file.');
     }
 }
 
@@ -667,6 +914,7 @@ async function handleAttackToggle(e) {
             
             const resultItem = document.createElement('div');
             resultItem.className = 'attack-result-item';
+            resultItem.dataset.attack = attackType;
             resultItem.innerHTML = `
                 <h4>🛡️ ${attackType.toUpperCase()} Attack Blocked!</h4>
                 <p>${data.reason}</p>
@@ -698,6 +946,12 @@ function restartDemo() {
     state.envelope = null;
     state.originalHash = null;
     state.decryptedHash = null;
+    state.decryptedContent = null;
+    state.decryptedFilename = null;
+    state.bindingSignatures.alice = null;
+    state.bindingSignatures.bob = null;
+    state.bindingVerification.alice = null;
+    state.bindingVerification.bob = null;
     state.customFile = null;
     
     // Reset UI
@@ -708,6 +962,21 @@ function restartDemo() {
     document.querySelector('input[value="alice-to-bob"]').checked = true;
     document.getElementById('custom-file-name').textContent = '';
     document.getElementById('custom-file').value = '';
+    
+    const downloadBtn = document.getElementById('download-decrypted-btn');
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+    }
+    
+    const importInput = document.getElementById('envelope-import-input');
+    if (importInput) {
+        importInput.value = '';
+    }
+    const statusElem = document.getElementById('import-envelope-status');
+    if (statusElem) {
+        statusElem.textContent = 'No envelope loaded';
+    }
+    updateBindingVerificationUI();
     
     // Go back to step 0
     goToStep(0);
