@@ -340,6 +340,7 @@ def decrypt_file():
             return jsonify({'success': False, 'error': 'No envelope provided'}), 400
         
         receiver = envelope.get('receiver')
+        ignore_replay = data.get('ignore_replay', False)
         
         # Unwrap AES key
         wrapped_key = base64.b64decode(envelope['wrapped_key'])
@@ -356,12 +357,13 @@ def decrypt_file():
         
         # Decrypt with AES-GCM and enforce nonce replay protection
         nonce_b64 = envelope['nonce']
-        if nonce_b64 in used_nonces:
-            return jsonify({
-                'success': False,
-                'error': 'Replay detected: nonce already used'
-            }), 400
-        used_nonces.add(nonce_b64)
+        if not ignore_replay:
+            if nonce_b64 in used_nonces:
+                return jsonify({
+                    'success': False,
+                    'error': 'Replay detected: nonce already used'
+                }), 400
+            used_nonces.add(nonce_b64)
         
         nonce = base64.b64decode(nonce_b64)
         ciphertext_only = base64.b64decode(envelope['ciphertext'])
@@ -377,7 +379,7 @@ def decrypt_file():
         try:
             plaintext = aesgcm.decrypt(nonce, ciphertext, aad)
             decryption_success = True
-        except Exception as e:
+        except Exception:
             plaintext = None
             decryption_success = False
         

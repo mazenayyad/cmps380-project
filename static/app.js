@@ -241,7 +241,7 @@ function previousStep() {
 
 // Execute Step Logic
 async function executeStepLogic(stepNum) {
-    switch(stepNum) {
+    switch (stepNum) {
         case 2:
             await exchangeAndBindKeys();
             break;
@@ -261,13 +261,17 @@ async function executeStepLogic(stepNum) {
             await verifySignature();
             break;
         case 8:
-            await decryptFile();
+            // Only decrypt if we haven't already (e.g. after importing an envelope)
+            if (!state.decryptedContent) {
+                await decryptFile();
+            }
             break;
         case 9:
             displayIntegrityCheck();
             break;
     }
 }
+
 
 // Step 1: Generate Keys
 async function generateKeys() {
@@ -683,7 +687,9 @@ async function verifySignature() {
 }
 
 // Step 8: Decrypt File
-async function decryptFile() {
+async function decryptFile(options = {}) {
+    const { ignoreReplay = false } = options;
+
     try {
         // Display wrapped key
         document.getElementById('wrapped-key-decrypt').textContent = truncateHash(state.envelope.wrapped_key);
@@ -702,7 +708,10 @@ async function decryptFile() {
         const response = await fetch('/api/decrypt-file', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ envelope: state.envelope })
+            body: JSON.stringify({
+                envelope: state.envelope,
+                ignore_replay: ignoreReplay
+            })
         });
         
         const data = await response.json();
@@ -731,6 +740,7 @@ async function decryptFile() {
         alert(error?.message ? `Decryption failed: ${error.message}` : 'Decryption failed. Please try again.');
     }
 }
+
 
 async function handleEnvelopeImport(event) {
     const fileInput = event.target;
@@ -773,7 +783,8 @@ async function handleEnvelopeImport(event) {
             }
             
             await verifySignature();
-            await decryptFile();
+            // When importing, skip replay protection: we expect to decrypt this again
+            await decryptFile({ ignoreReplay: true });
         } catch (error) {
             console.error('Error importing envelope:', error);
             if (statusElem) statusElem.textContent = 'Failed to load envelope';
@@ -785,6 +796,7 @@ async function handleEnvelopeImport(event) {
     
     reader.readAsText(file);
 }
+
 
 function isValidEnvelope(envelope) {
     if (!envelope || typeof envelope !== 'object') return false;
