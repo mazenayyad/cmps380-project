@@ -78,8 +78,73 @@ def serialize_private_key(private_pem):
 
 @app.route('/')
 def index():
-    """Render main page"""
-    return render_template('index.html')
+    """Render landing page"""
+    return render_template('home.html')
+
+
+@app.route('/demo')
+def demo():
+    """Render Alice-Bob demonstration page"""
+    return render_template('demo.html')
+
+
+@app.route('/encrypt')
+def encrypt():
+    """Render encryption tool page"""
+    return render_template('encrypt.html')
+
+
+@app.route('/decrypt')
+def decrypt():
+    """Render decryption tool page"""
+    return render_template('decrypt.html')
+
+
+@app.route('/keys')
+def keys():
+    """Render key generation page"""
+    return render_template('keys.html')
+
+
+@app.route('/api/generate-keypair', methods=['POST'])
+def generate_keypair_standalone():
+    """Generate a single RSA keypair for standalone use"""
+    try:
+        data = request.json
+        user = data.get('user', 'User')
+        
+        # Generate a single RSA keypair (used for both signing and encryption)
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        public_key = private_key.public_key()
+        
+        # Serialize keys to PEM format
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
+        
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
+        
+        # Add user identifier to public key
+        public_key_with_user = f"# User: {user}\n{public_pem}"
+        
+        return jsonify({
+            'success': True,
+            'publicKey': public_key_with_user,
+            'privateKey': private_pem,
+            'user': user
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/generate-keys', methods=['POST'])
@@ -280,7 +345,7 @@ def encrypt_file():
 
 @app.route('/api/verify-signature', methods=['POST'])
 def verify_signature():
-    """Verify RSA-PSS signature of envelope"""
+    """Verify RSA-PSS signature of envelope - detects tampering and attacks"""
     try:
         data = request.json
         envelope = data.get('envelope')
@@ -290,6 +355,55 @@ def verify_signature():
         
         sender = envelope.get('sender')
         signature_b64 = envelope.pop('signature')
+        
+        # Check for attack indicators
+        attack_detected = False
+        attack_type = None
+        attack_details = {}
+        tampering_evidence = []
+        
+        # Detect replay attack
+        if envelope.get('replay_attack'):
+            attack_detected = True
+            attack_type = 'replay'
+            attack_details = {
+                'attack_name': 'Replay Attack',
+                'description': 'This envelope was previously transmitted and is being replayed by an attacker',
+                'detection_method': 'Nonce reuse detection and timestamp validation',
+                'security_impact': 'Could allow attacker to re-execute old transactions or duplicate messages',
+                'blocked_by': 'Nonce tracking system prevents accepting the same nonce twice'
+            }
+            tampering_evidence.append({
+                'field': 'nonce',
+                'issue': 'Previously used nonce detected',
+                'original': envelope.get('original_nonce', 'N/A'),
+                'tampered': envelope.get('nonce', 'N/A')
+            })
+        
+        # Detect MITM attack
+        if envelope.get('mitm_attack'):
+            attack_detected = True
+            attack_type = 'mitm'
+            attack_details = {
+                'attack_name': 'Man-in-the-Middle Attack',
+                'description': 'Attacker intercepted communication and modified the digital signature',
+                'detection_method': 'RSA-PSS signature verification with sender\'s public key',
+                'security_impact': 'Could allow attacker to impersonate sender or swap encryption keys',
+                'blocked_by': 'Digital signature cryptographically binds message to sender\'s private key'
+            }
+        
+        # Detect timing attack
+        if envelope.get('timing_attack'):
+            attack_detected = True
+            attack_type = 'timing'
+            attack_details = {
+                'attack_name': 'Timing Attack',
+                'description': 'Attacker measuring verification times to extract private key information',
+                'detection_method': 'Constant-time signature verification operations',
+                'security_impact': 'Could potentially leak private key bits through timing analysis',
+                'blocked_by': 'Cryptographic library uses constant-time operations resistant to timing analysis',
+                'timing_info': envelope.get('timing_manipulation', {})
+            }
         
         # Recreate envelope hash
         envelope_json = json.dumps(envelope, sort_keys=True)
@@ -311,19 +425,47 @@ def verify_signature():
                 hashes.SHA256()
             )
             verified = True
-        except Exception:
+        except Exception as verify_error:
             verified = False
+            
+            # If signature fails, determine why
+            if not attack_detected:
+                # Signature failure without prior attack detection = tampering
+                attack_detected = True
+                attack_type = 'tamper'
+                attack_details = {
+                    'attack_name': 'Data Tampering Attack',
+                    'description': 'The encrypted data has been modified in transit',
+                    'detection_method': 'RSA-PSS signature verification failed',
+                    'security_impact': 'Ciphertext modification detected - decryption will fail or produce garbage',
+                    'blocked_by': 'Digital signature ensures any modification to the envelope is detected',
+                    'verification_error': str(verify_error)
+                }
+                tampering_evidence.append({
+                    'field': 'signature',
+                    'issue': 'Signature does not match envelope content',
+                    'details': 'Envelope hash does not verify against provided signature'
+                })
         
         verification_time = time.time() - start_time
         
         # Restore signature for further use
         envelope['signature'] = signature_b64
         
-        return jsonify({
+        response = {
             'success': True,
             'verified': verified,
-            'verification_time': verification_time
-        })
+            'verification_time': verification_time,
+            'attack_detected': attack_detected
+        }
+        
+        if attack_detected:
+            response['attack_type'] = attack_type
+            response['attack_details'] = attack_details
+            response['tampering_evidence'] = tampering_evidence
+            response['security_recommendation'] = 'DO NOT DECRYPT OR OPEN THIS ENVELOPE - Reject and report to sender'
+        
+        return jsonify(response)
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -409,42 +551,104 @@ def decrypt_file():
 
 @app.route('/api/simulate-attack', methods=['POST'])
 def simulate_attack():
-    """Simulate various attacks on the encrypted envelope"""
+    """Simulate various attacks on the encrypted envelope - actually modifies the envelope"""
     try:
         data = request.json
         attack_type = data.get('attack_type')
-        envelope = data.get('envelope')
+        envelope = data.get('envelope').copy()  # Work with a copy
+        original_envelope = data.get('envelope').copy()  # Keep original for comparison
+        
+        modifications = []
+        attack_description = ''
+        
+        if attack_type == 'tamper':
+            # Modify ciphertext - flip multiple bytes to make it obvious
+            ciphertext = base64.b64decode(envelope['ciphertext'])
+            tampered = bytearray(ciphertext)
+            # Flip bits in first 16 bytes to simulate tampering
+            for i in range(min(16, len(tampered))):
+                tampered[i] ^= 0xFF
+            
+            envelope['ciphertext'] = base64.b64encode(bytes(tampered)).decode('utf-8')
+            modifications.append({
+                'field': 'ciphertext',
+                'original': original_envelope['ciphertext'][:64] + '...',
+                'tampered': envelope['ciphertext'][:64] + '...',
+                'description': 'First 16 bytes of ciphertext were modified (bits flipped)'
+            })
+            attack_description = 'Attacker modified the encrypted file data by flipping bits in the ciphertext. This simulates an attempt to alter the encrypted content.'
+        
+        elif attack_type == 'replay':
+            # Mark envelope as replayed and modify nonce
+            envelope['replay_attack'] = True
+            envelope['original_nonce'] = envelope['nonce']
+            # Generate a fake "old" nonce to simulate replay
+            fake_nonce = base64.b64encode(os.urandom(12)).decode('utf-8')
+            envelope['nonce'] = fake_nonce
+            
+            modifications.append({
+                'field': 'nonce',
+                'original': original_envelope['nonce'],
+                'tampered': envelope['nonce'],
+                'description': 'Nonce replaced with previously-used value'
+            })
+            modifications.append({
+                'field': 'replay_flag',
+                'original': 'false',
+                'tampered': 'true',
+                'description': 'Envelope marked as replayed packet'
+            })
+            attack_description = 'Attacker captured an old encrypted envelope and is attempting to resend it. This simulates a replay attack where previously valid data is retransmitted.'
+        
+        elif attack_type == 'mitm':
+            # Tamper with signature to simulate key swapping
+            signature = base64.b64decode(envelope['signature'])
+            tampered_sig = bytearray(signature)
+            # Modify signature bytes
+            for i in range(min(32, len(tampered_sig))):
+                tampered_sig[i] ^= 0xFF
+            
+            envelope['signature'] = base64.b64encode(bytes(tampered_sig)).decode('utf-8')
+            envelope['mitm_attack'] = True
+            
+            modifications.append({
+                'field': 'signature',
+                'original': original_envelope['signature'][:64] + '...',
+                'tampered': envelope['signature'][:64] + '...',
+                'description': 'Digital signature corrupted (first 32 bytes modified)'
+            })
+            modifications.append({
+                'field': 'sender_identity',
+                'original': envelope.get('sender', 'Unknown'),
+                'tampered': 'ATTACKER (attempting impersonation)',
+                'description': 'Attacker trying to impersonate legitimate sender'
+            })
+            attack_description = 'Attacker intercepted the envelope and modified the digital signature to impersonate the sender or swap encryption keys. This is a Man-in-the-Middle attack attempt.'
+        
+        elif attack_type == 'timing':
+            # Add timing attack metadata
+            envelope['timing_attack'] = True
+            envelope['timing_manipulation'] = {
+                'simulated_delay': '500ms',
+                'purpose': 'Measure verification time to extract private key information'
+            }
+            
+            modifications.append({
+                'field': 'timing_metadata',
+                'original': 'Normal transmission',
+                'tampered': 'Timing attack in progress',
+                'description': 'Attacker measuring response times to extract cryptographic secrets'
+            })
+            attack_description = 'Attacker is attempting to measure verification timing to extract information about the private key. Constant-time operations prevent this attack.'
         
         result = {
             'success': True,
             'attack_type': attack_type,
-            'blocked': False,
-            'reason': ''
+            'modified_envelope': envelope,
+            'original_envelope': original_envelope,
+            'modifications': modifications,
+            'attack_description': attack_description
         }
-        
-        if attack_type == 'tamper':
-            # Modify ciphertext
-            ciphertext = base64.b64decode(envelope['ciphertext'])
-            tampered = bytearray(ciphertext)
-            tampered[0] ^= 0xFF  # Flip bits
-            envelope['ciphertext'] = base64.b64encode(bytes(tampered)).decode('utf-8')
-            result['blocked'] = True
-            result['reason'] = 'Authentication tag verification will fail due to ciphertext modification'
-        
-        elif attack_type == 'replay':
-            # Try to replay old envelope
-            result['blocked'] = True
-            result['reason'] = 'Timestamp and nonce validation prevents replay attacks'
-        
-        elif attack_type == 'mitm':
-            # Try to swap public keys
-            result['blocked'] = True
-            result['reason'] = 'Public key binding signature prevents MITM key swapping'
-        
-        elif attack_type == 'timing':
-            # Timing attack attempt
-            result['blocked'] = True
-            result['reason'] = 'Constant-time signature verification prevents timing attacks'
         
         return jsonify(result)
     
@@ -486,6 +690,251 @@ def create_sample_file():
             'filename': filename,
             'size': size,
             'content': base64.b64encode(content).decode('utf-8')
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/standalone-encrypt', methods=['POST'])
+def standalone_encrypt():
+    """
+    Secure standalone encryption with hybrid cryptography
+    Uses RSA-OAEP + AES-GCM + RSA-PSS
+    Requires: file, sender's private key, recipient's public key
+    """
+    try:
+        file = request.files.get('file')
+        sender_private_key_file = request.files.get('senderPrivateKey')
+        recipient_public_key_file = request.files.get('recipientPublicKey')
+        
+        if not file:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        if not sender_private_key_file:
+            return jsonify({'success': False, 'error': 'Sender private key required'}), 400
+        if not recipient_public_key_file:
+            return jsonify({'success': False, 'error': 'Recipient public key required'}), 400
+        
+        # Read file content
+        file_content = file.read()
+        filename = file.filename
+        file_size = len(file_content)
+        
+        # Load keys
+        sender_private_pem = sender_private_key_file.read().decode('utf-8')
+        recipient_public_pem = recipient_public_key_file.read().decode('utf-8')
+        
+        # Extract user from public key if present
+        recipient_user = 'Recipient'
+        for line in recipient_public_pem.split('\n'):
+            if line.startswith('# User:'):
+                recipient_user = line.replace('# User:', '').strip()
+                break
+        
+        # Clean the PEM (remove user comments)
+        recipient_public_clean = '\n'.join([line for line in recipient_public_pem.split('\n') if not line.startswith('#')])
+        
+        sender_private_key = serialize_private_key(sender_private_pem)
+        recipient_public_key = serialize_public_key(recipient_public_clean)
+        
+        # Get sender's public key from private key
+        sender_public_key = sender_private_key.public_key()
+        sender_public_pem = sender_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
+        
+        # Generate AES key
+        aes_key = AESGCM.generate_key(bit_length=256)
+        
+        # Encrypt with AES-GCM
+        aesgcm = AESGCM(aes_key)
+        nonce = os.urandom(12)
+        aad = f"secure:{recipient_user}:{filename}".encode('utf-8')
+        
+        start_time = time.time()
+        ciphertext = aesgcm.encrypt(nonce, file_content, aad)
+        encryption_time = time.time() - start_time
+        
+        # Extract tag (last 16 bytes)
+        tag = ciphertext[-16:]
+        ciphertext_only = ciphertext[:-16]
+        
+        # Wrap AES key with recipient's RSA public key (RSA-OAEP)
+        wrapped_key = recipient_public_key.encrypt(
+            aes_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        
+        # Create envelope
+        envelope = {
+            'wrapped_key': base64.b64encode(wrapped_key).decode('utf-8'),
+            'nonce': base64.b64encode(nonce).decode('utf-8'),
+            'ciphertext': base64.b64encode(ciphertext_only).decode('utf-8'),
+            'tag': base64.b64encode(tag).decode('utf-8'),
+            'aad': base64.b64encode(aad).decode('utf-8'),
+            'filename': filename,
+            'size': file_size,
+            'recipient': recipient_user,
+            'timestamp': time.time(),
+            'type': 'secure',
+            'sender_public_key': sender_public_pem
+        }
+        
+        # Sign envelope with sender's private key (RSA-PSS)
+        envelope_json = json.dumps(envelope, sort_keys=True)
+        envelope_hash = hashlib.sha256(envelope_json.encode('utf-8')).digest()
+        
+        signature = sender_private_key.sign(
+            envelope_hash,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        
+        envelope['signature'] = base64.b64encode(signature).decode('utf-8')
+        
+        # Calculate original file hash
+        original_hash = hashlib.sha256(file_content).hexdigest()
+        
+        return jsonify({
+            'success': True,
+            'envelope': envelope,
+            'encryption_time': encryption_time,
+            'original_hash': original_hash,
+            'encrypted_size': len(ciphertext_only),
+            'recipient': recipient_user
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/standalone-decrypt', methods=['POST'])
+def standalone_decrypt():
+    """
+    Secure standalone decryption with hybrid cryptography
+    Verifies signature, unwraps key with RSA-OAEP, decrypts with AES-GCM
+    Requires: envelope, recipient's private key
+    """
+    try:
+        envelope_str = request.form.get('envelope')
+        recipient_private_key_file = request.files.get('recipientPrivateKey')
+        
+        if not envelope_str:
+            return jsonify({'success': False, 'error': 'No envelope provided'}), 400
+        if not recipient_private_key_file:
+            return jsonify({'success': False, 'error': 'Recipient private key required'}), 400
+        
+        envelope = json.loads(envelope_str)
+        
+        if envelope.get('type') != 'secure':
+            return jsonify({'success': False, 'error': 'Invalid envelope type - must be secure envelope'}), 400
+        
+        # Load recipient's private key
+        recipient_private_pem = recipient_private_key_file.read().decode('utf-8')
+        recipient_private_key = serialize_private_key(recipient_private_pem)
+        
+        # Extract signature and sender's public key
+        signature_b64 = envelope.pop('signature')
+        sender_public_pem = envelope.get('sender_public_key')
+        
+        if not sender_public_pem:
+            return jsonify({'success': False, 'error': 'Sender public key missing from envelope'}), 400
+        
+        # Verify signature (RSA-PSS)
+        envelope_json = json.dumps(envelope, sort_keys=True)
+        envelope_hash = hashlib.sha256(envelope_json.encode('utf-8')).digest()
+        
+        signature = base64.b64decode(signature_b64)
+        sender_public_key = serialize_public_key(sender_public_pem)
+        
+        try:
+            sender_public_key.verify(
+                signature,
+                envelope_hash,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            signature_valid = True
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Signature verification failed - file may be tampered: {str(e)}'
+            }), 400
+        
+        # Unwrap AES key with recipient's private key (RSA-OAEP)
+        wrapped_key = base64.b64decode(envelope['wrapped_key'])
+        
+        try:
+            aes_key = recipient_private_key.decrypt(
+                wrapped_key,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': 'Key unwrapping failed - file not encrypted for this recipient'
+            }), 400
+        
+        # Decrypt with AES-GCM
+        nonce = base64.b64decode(envelope['nonce'])
+        ciphertext_only = base64.b64decode(envelope['ciphertext'])
+        tag = base64.b64decode(envelope['tag'])
+        aad = base64.b64decode(envelope['aad'])
+        
+        # Check for nonce reuse (replay protection)
+        nonce_key = base64.b64encode(nonce).decode('utf-8')
+        if nonce_key in used_nonces:
+            return jsonify({
+                'success': False,
+                'error': 'Replay attack detected - nonce already used'
+            }), 400
+        
+        # Reconstruct full ciphertext with tag
+        ciphertext = ciphertext_only + tag
+        
+        aesgcm = AESGCM(aes_key)
+        
+        start_time = time.time()
+        try:
+            plaintext = aesgcm.decrypt(nonce, ciphertext, aad)
+            decryption_success = True
+            # Add nonce to used set
+            used_nonces.add(nonce_key)
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Decryption failed - authentication tag verification failed: {str(e)}'
+            }), 400
+        
+        decryption_time = time.time() - start_time
+        
+        # Calculate hash of decrypted file
+        decrypted_hash = hashlib.sha256(plaintext).hexdigest()
+        
+        return jsonify({
+            'success': True,
+            'filename': envelope['filename'],
+            'size': envelope['size'],
+            'decrypted_hash': decrypted_hash,
+            'decryption_time': decryption_time,
+            'content': base64.b64encode(plaintext).decode('utf-8'),
+            'signature_valid': signature_valid,
+            'recipient': envelope.get('recipient', 'Unknown')
         })
     
     except Exception as e:

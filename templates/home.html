@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CypherLink - Secure File Exchange System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="landing-page">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-background">
+                <div class="hero-shape shape-1"></div>
+                <div class="hero-shape shape-2"></div>
+                <div class="hero-shape shape-3"></div>
+                <div class="particles">
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                    <span class="particle"></span>
+                </div>
+            </div>
+            <div class="hero-content">
+                <div class="hero-icon-wrapper">
+                    <div class="icon-glow"></div>
+                    <div class="hero-icon">🔐</div>
+                </div>
+                <h1 class="hero-title">
+                    <span class="title-line">CypherLink</span>
+                </h1>
+                <p class="hero-subtitle">Secure File Exchange System</p>
+                <p class="hero-tagline">Advanced Hybrid Cryptography for Cybersecurity Fundamentals</p>
+                <p class="hero-description">
+                    Explore RSA-OAEP, AES-GCM, and RSA-PSS encryption through interactive demonstrations and practical tools
+                </p>
+                <div class="hero-badges">
+                    <span class="badge badge-animated">
+                        <span class="badge-icon">🔑</span>
+                        <span class="badge-text">RSA-2048</span>
+                    </span>
+                    <span class="badge badge-animated">
+                        <span class="badge-icon">🛡️</span>
+                        <span class="badge-text">AES-256-GCM</span>
+                    </span>
+                    <span class="badge badge-animated">
+                        <span class="badge-icon">✍️</span>
+                        <span class="badge-text">RSA-PSS</span>
+                    </span>
+                    <span class="badge badge-animated badge-highlight">
+                        <span class="badge-icon">🎓</span>
+                        <span class="badge-text">CMPS 380</span>
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Grid -->
+        <section class="features-section">
+            <div class="features-grid">
+                
+                <!-- Key Generation Card -->
+                <div class="feature-card keys-card">
+                    <div class="card-icon">🔑</div>
+                    <h2 class="card-title">Key Generation</h2>
+                    <p class="card-description">
+                        Generate secure RSA-2048 keypairs for encryption and signing. 
+                        Create your public key to share and private key to keep secret.
+                    </p>
+                    <ul class="card-features">
+                        <li><span class="feature-icon">🔐</span> RSA-2048 Keypairs</li>
+                        <li><span class="feature-icon">🌐</span> Public Key Sharing</li>
+                        <li><span class="feature-icon">🔒</span> Private Key Security</li>
+                        <li><span class="feature-icon">📄</span> PEM Format Export</li>
+                        <li><span class="feature-icon">⚡</span> Instant Generation</li>
+                    </ul>
+                    <a href="/keys" class="card-button keys">
+                        <span>Generate Keys</span>
+                        <span class="arrow">→</span>
+                    </a>
+                </div>
+
+                <!-- Encryption Tool Card -->
+                <div class="feature-card encrypt-card">
+                    <div class="card-icon">🔒</div>
+                    <h2 class="card-title">File Encryption Tool</h2>
+                    <p class="card-description">
+                        Encrypt files with hybrid cryptography. Uses RSA-OAEP key wrapping, 
+                        AES-256-GCM encryption, and RSA-PSS signatures for maximum security.
+                    </p>
+                    <ul class="card-features">
+                        <li><span class="feature-icon">🔗</span> Hybrid Cryptography</li>
+                        <li><span class="feature-icon">🛡️</span> RSA-OAEP + AES-GCM</li>
+                        <li><span class="feature-icon">✍️</span> RSA-PSS Signatures</li>
+                        <li><span class="feature-icon">🎯</span> Access Control</li>
+                        <li><span class="feature-icon">👤</span> Recipient-Specific</li>
+                    </ul>
+                    <a href="/encrypt" class="card-button encrypt">
+                        <span>Encrypt Files</span>
+                        <span class="arrow">→</span>
+                    </a>
+                </div>
+
+                <!-- Decryption Tool Card -->
+                <div class="feature-card decrypt-card">
+                    <div class="card-icon">🔓</div>
+                    <h2 class="card-title">File Decryption Tool</h2>
+                    <p class="card-description">
+                        Decrypt files with signature verification and integrity checks. 
+                        Only works with your private key - ensures only you can decrypt.
+                    </p>
+                    <ul class="card-features">
+                        <li><span class="feature-icon">✅</span> Signature Verification</li>
+                        <li><span class="feature-icon">🔓</span> Key Unwrapping</li>
+                        <li><span class="feature-icon">🔍</span> Integrity Checks</li>
+                        <li><span class="feature-icon">🛑</span> Replay Protection</li>
+                        <li><span class="feature-icon">💾</span> Secure Recovery</li>
+                    </ul>
+                    <a href="/decrypt" class="card-button decrypt">
+                        <span>Decrypt Files</span>
+                        <span class="arrow">→</span>
+                    </a>
+                </div>
+
+                <!-- Demo Card -->
+                <div class="feature-card demo-card">
+                    <div class="card-icon-images">
+                        <img src="{{ url_for('static', filename='alice-image.jpg') }}" alt="Alice" class="demo-avatar">
+                        <img src="{{ url_for('static', filename='bob-image.jpg') }}" alt="Bob" class="demo-avatar">
+                    </div>
+                    <h2 class="card-title">Alice & Bob Demo</h2>
+                    <p class="card-description">
+                        Interactive demonstration of secure document exchange between two parties. 
+                        Visualize key generation, signing, encryption, and decryption in real-time.
+                    </p>
+                    <ul class="card-features">
+                        <li><span class="feature-icon">🔑</span> RSA Keypair Generation</li>
+                        <li><span class="feature-icon">🤝</span> Public Key Binding</li>
+                        <li><span class="feature-icon">🔐</span> Hybrid Encryption</li>
+                        <li><span class="feature-icon">📝</span> Digital Signatures</li>
+                        <li><span class="feature-icon">⚠️</span> Attack Simulations</li>
+                    </ul>
+                    <a href="/demo" class="card-button primary">
+                        <span>Launch Demo</span>
+                        <span class="arrow">→</span>
+                    </a>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Info Section -->
+        <section class="info-section">
+            <div class="info-content">
+                <h2 class="info-title">How It Works</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-number">1</div>
+                        <h3>Key Generation</h3>
+                        <p>RSA-2048 keypairs provide asymmetric encryption and digital signature capabilities</p>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-number">2</div>
+                        <h3>Hybrid Encryption</h3>
+                        <p>AES-256-GCM encrypts files efficiently, RSA-OAEP protects the symmetric key</p>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-number">3</div>
+                        <h3>Authentication</h3>
+                        <p>RSA-PSS signatures ensure integrity and non-repudiation of encrypted messages</p>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-number">4</div>
+                        <h3>Secure Transfer</h3>
+                        <p>Authenticated encryption with associated data (AEAD) prevents tampering and replays</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="landing-footer">
+            <p><strong>CypherLink</strong> - CMPS 380 Cybersecurity Fundamentals Project</p>
+            <p class="footer-tech">Built with Python Flask, Cryptography Library, RSA & AES Standards</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='home.js') }}"></script>
+</body>
+</html>

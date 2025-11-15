@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Key Generation - CypherLink</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="tool-page">
+    <!-- Navigation -->
+    <nav class="tool-nav">
+        <a href="/" class="nav-logo">
+            <span class="nav-logo-icon">🔐</span>
+            <span class="nav-logo-text">CypherLink</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Home</a>
+            <a href="/keys" class="nav-link active">Keys</a>
+            <a href="/demo" class="nav-link">Demo</a>
+            <a href="/encrypt" class="nav-link">Encrypt</a>
+            <a href="/decrypt" class="nav-link">Decrypt</a>
+        </div>
+    </nav>
+
+    <div class="tool-container">
+        <div class="tool-header">
+            <div class="tool-icon">🔑</div>
+            <h1>Generate Your Keypair</h1>
+            <p class="tool-subtitle">Create RSA-2048 public/private keypair for secure file exchange</p>
+        </div>
+
+        <div class="tool-content">
+            <div class="content-grid">
+            <!-- Main Tool Panel -->
+            <div class="tool-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Key Generation</h2>
+                        <p>Generate a secure RSA-2048 keypair for encryption and signing</p>
+                    </div>
+
+                    <div class="card-body">
+                        <!-- Input Section -->
+                        <div class="form-section">
+                            <label class="form-label">
+                                <span class="label-text">Your Name/Identifier</span>
+                                <span class="label-hint">This will be included in your public key</span>
+                            </label>
+                            <input type="text" id="userName" class="form-input" placeholder="e.g., Alice, Bob, your email..." />
+                        </div>
+
+                        <!-- Action Button -->
+                        <button id="generateBtn" class="btn btn-primary btn-large">
+                            <span class="btn-icon">🔑</span>
+                            Generate Keypair
+                        </button>
+
+                        <!-- Results Section -->
+                        <div id="resultsSection" class="results-section" style="display: none;">
+                            <div class="result-success">
+                                <div class="success-icon">✅</div>
+                                <h3>Keypair Generated Successfully!</h3>
+                                <p>Your RSA-2048 keypair has been created</p>
+                            </div>
+
+                            <!-- Public Key -->
+                            <div class="key-container">
+                                <div class="key-header">
+                                    <span class="key-icon">🌐</span>
+                                    <h4>Public Key</h4>
+                                    <span class="key-badge safe">Share This</span>
+                                </div>
+                                <div class="key-info">
+                                    <p>Share this with people who want to send you encrypted files</p>
+                                </div>
+                                <textarea id="publicKeyDisplay" class="key-display" readonly></textarea>
+                                <div class="key-actions">
+                                    <button id="copyPublicBtn" class="btn btn-secondary">
+                                        <span class="btn-icon">📋</span>
+                                        Copy to Clipboard
+                                    </button>
+                                    <button id="downloadPublicBtn" class="btn btn-secondary">
+                                        <span class="btn-icon">💾</span>
+                                        Download Public Key
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Private Key -->
+                            <div class="key-container">
+                                <div class="key-header">
+                                    <span class="key-icon">🔒</span>
+                                    <h4>Private Key</h4>
+                                    <span class="key-badge danger">Keep Secret!</span>
+                                </div>
+                                <div class="key-info warning">
+                                    <p>⚠️ <strong>NEVER share this key!</strong> Anyone with your private key can decrypt your files and impersonate you.</p>
+                                </div>
+                                <textarea id="privateKeyDisplay" class="key-display" readonly></textarea>
+                                <div class="key-actions">
+                                    <button id="copyPrivateBtn" class="btn btn-secondary">
+                                        <span class="btn-icon">📋</span>
+                                        Copy to Clipboard
+                                    </button>
+                                    <button id="downloadPrivateBtn" class="btn btn-danger">
+                                        <span class="btn-icon">💾</span>
+                                        Download Private Key
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Next Steps -->
+                            <div class="next-steps">
+                                <h4>📌 Next Steps</h4>
+                                <ol>
+                                    <li><strong>Download both keys</strong> and store your private key securely</li>
+                                    <li><strong>Share your public key</strong> with people who want to send you files</li>
+                                    <li>To <strong>encrypt a file</strong>, you need:
+                                        <ul>
+                                            <li>Your private key (for signing)</li>
+                                            <li>Recipient's public key (for encryption)</li>
+                                        </ul>
+                                    </li>
+                                    <li>To <strong>decrypt a file</strong>, you need:
+                                        <ul>
+                                            <li>Your private key (to unwrap the encryption key)</li>
+                                        </ul>
+                                    </li>
+                                </ol>
+                                <div class="next-actions">
+                                    <a href="/encrypt" class="btn btn-primary">
+                                        <span class="btn-icon">📤</span>
+                                        Encrypt a File
+                                    </a>
+                                    <button id="generateAnotherBtn" class="btn btn-secondary">
+                                        <span class="btn-icon">🔄</span>
+                                        Generate Another Keypair
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Sidebar -->
+            <aside class="info-sidebar">
+                <div class="info-card">
+                    <div class="info-icon">🔐</div>
+                    <h3>RSA Keypairs</h3>
+                    <p>RSA is an asymmetric encryption algorithm that uses a pair of mathematically related keys:</p>
+                    <ul class="info-list">
+                        <li><strong>Public Key:</strong> Can be freely shared. Used to encrypt data and verify signatures.</li>
+                        <li><strong>Private Key:</strong> Must be kept secret. Used to decrypt data and create signatures.</li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-icon">🛡️</div>
+                    <h3>Security Specifications</h3>
+                    <ul class="info-list">
+                        <li><strong>Key Size:</strong> 2048 bits</li>
+                        <li><strong>Public Exponent:</strong> 65537</li>
+                        <li><strong>Format:</strong> PEM encoding</li>
+                        <li><strong>Security Level:</strong> 112-bit equivalent</li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-icon">⚡</div>
+                    <h3>Key Uses</h3>
+                    <ul class="info-list">
+                        <li><strong>RSA-OAEP:</strong> Encrypts symmetric keys (key wrapping)</li>
+                        <li><strong>RSA-PSS:</strong> Creates digital signatures for authentication</li>
+                        <li><strong>Combined:</strong> Enables hybrid cryptography with AES-GCM</li>
+                    </ul>
+                </div>
+
+                <div class="info-card warning-card">
+                    <div class="info-icon">⚠️</div>
+                    <h3>Security Best Practices</h3>
+                    <ul class="info-list">
+                        <li>Never email your private key</li>
+                        <li>Store private keys encrypted on disk</li>
+                        <li>Use different keypairs for different purposes</li>
+                        <li>Backup your private key securely</li>
+                        <li>Rotate keys periodically</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+        </div>
+    </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='keys.js') }}"></script>
+</body>
+</html>

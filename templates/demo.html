@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CypherLink - Secure File Transfer Demo</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='bob-image.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <!-- AES-GCM Details Modal -->
+    <div id="aes-details-modal" class="modal" onclick="closeAESDetailsModal(event)">
+        <div class="modal-content aes-modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeAESDetailsModal()">&times;</span>
+            <h2>🔐 How AES-256-GCM Encryption Works</h2>
+            
+            <div class="aes-explanation-section">
+                <h3>📚 Overview</h3>
+                <p>AES-GCM (Advanced Encryption Standard - Galois/Counter Mode) is an authenticated encryption algorithm that provides both <strong>confidentiality</strong> and <strong>authenticity</strong>.</p>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔄 The Encryption Process</h3>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Initialize Counter Block</h4>
+                        <p>The 96-bit nonce (IV) is combined with a 32-bit counter starting at 1 to create a 128-bit counter block.</p>
+                        <code class="code-block">Counter Block = Nonce (96 bits) || Counter (32 bits)</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Counter Mode Encryption</h4>
+                        <p>For each 128-bit block of plaintext:</p>
+                        <ul>
+                            <li>Encrypt the counter block using AES-256 with the symmetric key</li>
+                            <li>XOR the result with the plaintext block to produce ciphertext</li>
+                            <li>Increment the counter for the next block</li>
+                        </ul>
+                        <code class="code-block">Ciphertext[i] = Plaintext[i] ⊕ AES(Key, Counter[i])</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>GHASH Authentication</h4>
+                        <p>Compute authentication tag over the AAD (Additional Authenticated Data) and ciphertext using GHASH function with a hash subkey derived from the AES key.</p>
+                        <code class="code-block">GHASH_H(AAD || Ciphertext || Lengths)</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Generate Authentication Tag</h4>
+                        <p>Encrypt counter block 0 and XOR it with the GHASH result to produce the final 128-bit authentication tag.</p>
+                        <code class="code-block">Tag = GHASH ⊕ AES(Key, Nonce || 0x00000000)</code>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>✨ Key Properties</h3>
+                <div class="properties-grid">
+                    <div class="property-item">
+                        <span class="property-icon">🔒</span>
+                        <h4>Confidentiality</h4>
+                        <p>CTR mode ensures plaintext is encrypted securely</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">✅</span>
+                        <h4>Authenticity</h4>
+                        <p>Authentication tag proves data hasn't been tampered with</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">⚡</span>
+                        <h4>Performance</h4>
+                        <p>Can be parallelized for fast encryption/decryption</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🛡️</span>
+                        <h4>Security</h4>
+                        <p>Resistant to chosen-ciphertext attacks</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>📤 Output</h3>
+                <p>The encryption produces three components:</p>
+                <ul>
+                    <li><strong>Ciphertext:</strong> Encrypted file data (same length as plaintext)</li>
+                    <li><strong>Authentication Tag:</strong> 128-bit tag for integrity verification</li>
+                    <li><strong>Nonce:</strong> Must be transmitted with ciphertext for decryption</li>
+                </ul>
+            </div>
+            
+            <button class="modal-close-btn" onclick="closeAESDetailsModal()">Close</button>
+        </div>
+    </div>
+    
+    <!-- RSA-OAEP Details Modal -->
+    <div id="rsa-details-modal" class="modal" onclick="closeRSADetailsModal(event)">
+        <div class="modal-content aes-modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeRSADetailsModal()">&times;</span>
+            <h2>🔐 How RSA-OAEP Key Wrapping Works</h2>
+            
+            <div class="aes-explanation-section">
+                <h3>📚 Overview</h3>
+                <p>RSA-OAEP (Optimal Asymmetric Encryption Padding) is used to securely wrap the AES symmetric key using the receiver's public key. Only the receiver with the corresponding private key can unwrap it.</p>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔄 The Encryption Process</h3>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Add Random Padding</h4>
+                        <p>Generate random padding using a mask generation function (MGF1 with SHA-256) to ensure the same plaintext encrypts to different ciphertexts each time.</p>
+                        <code class="code-block">Padding = MGF1-SHA256(random_seed, length)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Purpose:</strong> Prevents deterministic encryption and protects against chosen-plaintext attacks.</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Encode Message with OAEP</h4>
+                        <p>The OAEP encoding scheme combines the AES key with the padding:</p>
+                        <ul>
+                            <li>Create a data block: <code>DB = Hash(Label) || Padding || 0x01 || AES_Key</code></li>
+                            <li>Generate random seed for masking</li>
+                            <li>Apply mask to data block: <code>maskedDB = DB ⊕ MGF(seed)</code></li>
+                            <li>Apply mask to seed: <code>maskedSeed = seed ⊕ MGF(maskedDB)</code></li>
+                        </ul>
+                        <code class="code-block">EM = 0x00 || maskedSeed || maskedDB</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Result:</strong> A padded message (EM) the same size as the RSA modulus (2048 bits = 256 bytes).</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Convert to Integer</h4>
+                        <p>Treat the encoded message as a large integer (m) in the range [0, n-1] where n is the RSA modulus.</p>
+                        <code class="code-block">m = bytes_to_integer(EM)</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>RSA Encryption Operation</h4>
+                        <p>Perform modular exponentiation using the receiver's public key (e, n):</p>
+                        <code class="code-block">c = m<sup>e</sup> mod n</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);">Where:</p>
+                        <ul>
+                            <li><strong>m</strong> = encoded message as integer</li>
+                            <li><strong>e</strong> = public exponent (typically 65537)</li>
+                            <li><strong>n</strong> = RSA modulus (product of two large primes)</li>
+                            <li><strong>c</strong> = ciphertext (wrapped key)</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h4>Convert to Bytes</h4>
+                        <p>Convert the resulting integer back to a byte string with the same length as the RSA modulus.</p>
+                        <code class="code-block">wrapped_key = integer_to_bytes(c, 256)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Output:</strong> 256 bytes (2048 bits) of wrapped key data.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔓 Decryption (Unwrapping)</h3>
+                <p>The receiver uses their private key (d, n) to reverse the process:</p>
+                <code class="code-block">m = c<sup>d</sup> mod n</code>
+                <p style="margin-top: 10px;">Then removes the OAEP padding to extract the original AES key.</p>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>✨ Key Properties</h3>
+                <div class="properties-grid">
+                    <div class="property-item">
+                        <span class="property-icon">🎲</span>
+                        <h4>Non-Deterministic</h4>
+                        <p>Random padding ensures different outputs each time</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🛡️</span>
+                        <h4>CPA Secure</h4>
+                        <p>Resistant to chosen-plaintext attacks</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">✅</span>
+                        <h4>All-or-Nothing</h4>
+                        <p>Any padding error during decryption is detectable</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🔐</span>
+                        <h4>Forward Secrecy</h4>
+                        <p>Only the holder of the private key can decrypt</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>📤 Why Use RSA-OAEP?</h3>
+                <ul>
+                    <li><strong>Hybrid Encryption:</strong> RSA is too slow for large files, so we only use it to wrap the fast AES key</li>
+                    <li><strong>Key Distribution:</strong> Allows secure key exchange without a pre-shared secret</li>
+                    <li><strong>Security:</strong> OAEP padding makes RSA encryption secure against modern attacks</li>
+                    <li><strong>Standard Compliance:</strong> Recommended by NIST and widely adopted</li>
+                </ul>
+            </div>
+            
+            <button class="modal-close-btn" onclick="closeRSADetailsModal()">Close</button>
+        </div>
+    </div>
+    
+    <!-- RSA-OAEP Decryption (Unwrap) Modal -->
+    <div id="rsa-decrypt-modal" class="modal" onclick="closeRSADecryptModal(event)">
+        <div class="modal-content aes-modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeRSADecryptModal()">&times;</span>
+            <h2>🔓 How RSA-OAEP Key Unwrapping Works</h2>
+            
+            <div class="aes-explanation-section">
+                <h3>📚 Overview</h3>
+                <p>RSA-OAEP decryption is used to <strong>unwrap</strong> the encrypted AES key using the receiver's private key. This reverses the encryption process and recovers the original 32-byte AES symmetric key.</p>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔄 The Decryption Process</h3>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Receive Wrapped Key</h4>
+                        <p>The receiver obtains the 256-byte (2048-bit) wrapped key from the secure envelope sent by the sender.</p>
+                        <code class="code-block">wrapped_key = 256 bytes of encrypted data</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Size:</strong> Always 256 bytes for RSA-2048, regardless of the actual AES key size (32 bytes).</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Convert to Integer</h4>
+                        <p>Interpret the wrapped key bytes as a large integer (ciphertext c) in the range [0, n-1].</p>
+                        <code class="code-block">c = bytes_to_integer(wrapped_key)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Note:</strong> This is the inverse of the final step in encryption.</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>RSA Decryption Operation</h4>
+                        <p>Perform modular exponentiation using the receiver's <strong>private key</strong> (d, n):</p>
+                        <code class="code-block">m = c<sup>d</sup> mod n</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);">Where:</p>
+                        <ul>
+                            <li><strong>c</strong> = wrapped key as integer (ciphertext)</li>
+                            <li><strong>d</strong> = private exponent (kept secret by receiver)</li>
+                            <li><strong>n</strong> = RSA modulus (same as in public key)</li>
+                            <li><strong>m</strong> = recovered OAEP-encoded message</li>
+                        </ul>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Mathematical Property:</strong> Since c = m<sup>e</sup> mod n, then c<sup>d</sup> = (m<sup>e</sup>)<sup>d</sup> = m<sup>ed</sup> = m mod n</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Convert Back to Bytes</h4>
+                        <p>Convert the decrypted integer back to a 256-byte encoded message (EM).</p>
+                        <code class="code-block">EM = integer_to_bytes(m, 256)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Structure:</strong> EM = 0x00 || maskedSeed || maskedDB</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h4>Remove OAEP Padding</h4>
+                        <p>Reverse the OAEP encoding to extract the original AES key:</p>
+                        <ul>
+                            <li>Separate the encoded message: <code>maskedSeed</code> and <code>maskedDB</code></li>
+                            <li>Recover seed: <code>seed = maskedSeed ⊕ MGF(maskedDB)</code></li>
+                            <li>Recover data block: <code>DB = maskedDB ⊕ MGF(seed)</code></li>
+                            <li>Parse DB: <code>DB = Hash(Label) || Padding || 0x01 || AES_Key</code></li>
+                            <li>Verify the hash and padding structure</li>
+                            <li>Extract the 32-byte AES key from the end of DB</li>
+                        </ul>
+                        <code class="code-block">AES_Key = last 32 bytes of DB</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <h4>Validate and Return</h4>
+                        <p>Verify that the OAEP padding is correctly formed. Any error indicates tampering or wrong private key.</p>
+                        <ul>
+                            <li>Check that first byte is 0x00</li>
+                            <li>Verify Hash(Label) matches expected value</li>
+                            <li>Confirm 0x01 separator byte is present</li>
+                            <li>Validate padding structure</li>
+                        </ul>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Success:</strong> Returns the original 32-byte AES-256 key</p>
+                        <p style="margin-top: 5px; color: var(--text-secondary);"><strong>Failure:</strong> Raises a padding error (prevents padding oracle attacks)</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>✨ Security Properties</h3>
+                <div class="properties-grid">
+                    <div class="property-item">
+                        <span class="property-icon">🔐</span>
+                        <h4>Private Key Required</h4>
+                        <p>Only the receiver with the private key can unwrap</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🛡️</span>
+                        <h4>Tamper Detection</h4>
+                        <p>Any modification causes padding validation to fail</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">⚠️</span>
+                        <h4>Constant-Time</h4>
+                        <p>Implementation resists timing attacks during validation</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">✅</span>
+                        <h4>All-or-Nothing</h4>
+                        <p>Either fully succeeds or completely fails - no partial info leaked</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔍 What's Happening in CypherLink</h3>
+                <div class="cypherlink-process">
+                    <div class="process-item">
+                        <span class="process-number">①</span>
+                        <p><strong>Bob receives</strong> the 256-byte wrapped key from Alice's secure envelope</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">②</span>
+                        <p><strong>Bob's private key</strong> (stored securely in the session) performs RSA decryption: c<sup>d</sup> mod n</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">③</span>
+                        <p><strong>OAEP padding is removed</strong> and validated to ensure integrity</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">④</span>
+                        <p><strong>32-byte AES key is recovered</strong> - the same key Alice used to encrypt the file!</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">⑤</span>
+                        <p><strong>Bob can now decrypt</strong> the file using this AES key with AES-256-GCM</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>💡 Key Insights</h3>
+                <ul>
+                    <li><strong>Asymmetric Magic:</strong> Alice encrypted with Bob's public key, but only Bob's private key can decrypt</li>
+                    <li><strong>Key Exchange:</strong> This solves the problem of securely sharing the AES key over an insecure channel</li>
+                    <li><strong>Hybrid Approach:</strong> RSA for key exchange + AES for file encryption = best of both worlds</li>
+                    <li><strong>No Pre-Shared Secret:</strong> Alice and Bob never needed to meet in advance to exchange keys</li>
+                </ul>
+            </div>
+            
+            <button class="modal-close-btn" onclick="closeRSADecryptModal()">Close</button>
+        </div>
+    </div>
+    
+    <!-- AES-GCM Decryption Modal -->
+    <div id="aes-decrypt-modal" class="modal" onclick="closeAESDecryptModal(event)">
+        <div class="modal-content aes-modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeAESDecryptModal()">&times;</span>
+            <h2>🔓 How AES-256-GCM Decryption Works</h2>
+            
+            <div class="aes-explanation-section">
+                <h3>📚 Overview</h3>
+                <p>AES-GCM decryption reverses the encryption process, recovering the original plaintext while simultaneously verifying data authenticity and integrity using the authentication tag.</p>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔄 The Decryption Process</h3>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Gather Required Inputs</h4>
+                        <p>The decryption process requires all of the following components:</p>
+                        <ul>
+                            <li><strong>Ciphertext:</strong> The encrypted file data</li>
+                            <li><strong>AES-256 Key:</strong> 32-byte key (recovered from RSA unwrapping)</li>
+                            <li><strong>Nonce (IV):</strong> 96-bit initialization vector used during encryption</li>
+                            <li><strong>Authentication Tag:</strong> 128-bit tag for verification</li>
+                            <li><strong>AAD:</strong> Additional Authenticated Data (metadata about the file)</li>
+                        </ul>
+                        <code class="code-block">All components must match those used during encryption</code>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Verify Authentication Tag FIRST</h4>
+                        <p><strong>Critical:</strong> Before decrypting, recompute the authentication tag and verify it matches:</p>
+                        <ul>
+                            <li>Compute GHASH over AAD and ciphertext using the AES key</li>
+                            <li>Generate expected tag: <code>Expected_Tag = GHASH ⊕ AES(Key, Nonce || 0x00000000)</code></li>
+                            <li>Compare with received tag using constant-time comparison</li>
+                        </ul>
+                        <code class="code-block">if Expected_Tag ≠ Received_Tag: ABORT (data tampered!)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Why First?</strong> Prevents decrypting tampered or invalid data (resist chosen-ciphertext attacks).</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Initialize Counter Block</h4>
+                        <p>Reconstruct the same counter block used during encryption:</p>
+                        <code class="code-block">Counter Block = Nonce (96 bits) || Counter (32 bits starting at 1)</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Important:</strong> Must use the exact same nonce as encryption!</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Counter Mode Decryption</h4>
+                        <p>For each 128-bit block of ciphertext, reverse the CTR encryption:</p>
+                        <ul>
+                            <li>Encrypt the counter block with AES-256 using the same key</li>
+                            <li>XOR the result with the ciphertext block to recover plaintext</li>
+                            <li>Increment the counter for the next block</li>
+                        </ul>
+                        <code class="code-block">Plaintext[i] = Ciphertext[i] ⊕ AES(Key, Counter[i])</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Mathematical Property:</strong> XOR is its own inverse, so encryption and decryption use the same operation!</p>
+                    </div>
+                </div>
+                
+                <div class="aes-step-detail">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h4>Recover Original File</h4>
+                        <p>After processing all blocks, we have the complete plaintext:</p>
+                        <ul>
+                            <li>Concatenate all decrypted blocks</li>
+                            <li>Handle any partial final block (same size as original)</li>
+                            <li>The result is the exact original file data</li>
+                        </ul>
+                        <code class="code-block">Original_File = Plaintext[1] || Plaintext[2] || ... || Plaintext[n]</code>
+                        <p style="margin-top: 10px; color: var(--text-secondary);"><strong>Success!</strong> The file is now decrypted and verified as authentic.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>✨ Security Guarantees</h3>
+                <div class="properties-grid">
+                    <div class="property-item">
+                        <span class="property-icon">✅</span>
+                        <h4>Authenticated Decryption</h4>
+                        <p>Tag verification ensures data hasn't been tampered with</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🔒</span>
+                        <h4>Confidentiality</h4>
+                        <p>Without the key, ciphertext reveals nothing about plaintext</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">🛡️</span>
+                        <h4>Integrity</h4>
+                        <p>Even 1 bit changed in transit will cause tag verification to fail</p>
+                    </div>
+                    <div class="property-item">
+                        <span class="property-icon">⚡</span>
+                        <h4>Parallelizable</h4>
+                        <p>Each block can be decrypted independently for speed</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>🔍 What's Happening in CypherLink</h3>
+                <div class="cypherlink-process">
+                    <div class="process-item">
+                        <span class="process-number">①</span>
+                        <p><strong>Bob receives</strong> the ciphertext, nonce, tag, and AAD from the secure envelope</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">②</span>
+                        <p><strong>Authentication tag is verified</strong> using GHASH - if it fails, decryption stops immediately</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">③</span>
+                        <p><strong>Counter mode decryption</strong> processes the ciphertext block by block using the unwrapped AES key</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">④</span>
+                        <p><strong>Original file is recovered</strong> - byte-for-byte identical to what Alice encrypted!</p>
+                    </div>
+                    <div class="process-item">
+                        <span class="process-number">⑤</span>
+                        <p><strong>SHA-256 hash is computed</strong> on the decrypted file for final integrity verification</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>💡 Why AES-GCM is Perfect for File Transfer</h3>
+                <ul>
+                    <li><strong>Speed:</strong> AES is extremely fast, even on large files (hardware-accelerated on modern CPUs)</li>
+                    <li><strong>Authentication:</strong> Built-in tag verification prevents accepting tampered files</li>
+                    <li><strong>Nonce-Based:</strong> Same key can be safely used multiple times with different nonces</li>
+                    <li><strong>Industry Standard:</strong> Used by TLS 1.3, IPsec, and other critical protocols</li>
+                    <li><strong>No Padding:</strong> CTR mode doesn't require padding, so output size equals input size</li>
+                </ul>
+            </div>
+            
+            <div class="aes-explanation-section">
+                <h3>⚠️ Critical Security Notes</h3>
+                <div class="security-warnings">
+                    <div class="warning-item">
+                        <span class="warning-icon">🚫</span>
+                        <p><strong>Never Reuse Nonces:</strong> Using the same nonce with the same key twice is catastrophic!</p>
+                    </div>
+                    <div class="warning-item">
+                        <span class="warning-icon">🔍</span>
+                        <p><strong>Tag First:</strong> Always verify the tag before decrypting to prevent attacks</p>
+                    </div>
+                    <div class="warning-item">
+                        <span class="warning-icon">⏱️</span>
+                        <p><strong>Constant-Time:</strong> Tag comparison must be constant-time to prevent timing attacks</p>
+                    </div>
+                    <div class="warning-item">
+                        <span class="warning-icon">🔐</span>
+                        <p><strong>Key Protection:</strong> The AES key must be kept secret - that's why we use RSA to wrap it!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="modal-close-btn" onclick="closeAESDecryptModal()">Close</button>
+        </div>
+    </div>
+    
+    <!-- Navigation -->
+    <nav class="tool-nav">
+        <a href="/" class="nav-logo">
+            <span class="nav-logo-icon">🔐</span>
+            <span class="nav-logo-text">CypherLink</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Home</a>
+            <a href="/keys" class="nav-link">Keys</a>
+            <a href="/demo" class="nav-link active">Demo</a>
+            <a href="/encrypt" class="nav-link">Encrypt</a>
+            <a href="/decrypt" class="nav-link">Decrypt</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Step 0: Initial Setup -->
+            <section id="step-0" class="step-section active">
+                <div class="parties-container">
+                    <!-- Alice -->
+                    <div class="party alice-party">
+                        <div class="party-header">
+                            <img src="{{ url_for('static', filename='alice-image.jpg') }}" alt="Alice" class="party-avatar">
+                            <h2>Alice</h2>
+                        </div>
+                        <div class="party-status">
+                            <span class="status-badge">Ready</span>
+                        </div>
+                        <div class="party-info">
+                            <h3>Files Available:</h3>
+                            <div class="file-list" id="alice-files">
+                                <div class="file-item" data-filename="sample_1kb.txt" data-size="1024" data-owner="alice">
+                                    <span class="file-icon">📄</span>
+                                    <span class="file-name">sample_1kb.txt</span>
+                                    <span class="file-size">1 KB</span>
+                                </div>
+                                <div class="file-item" data-filename="document_1mb.pdf" data-size="1048576" data-owner="alice">
+                                    <span class="file-icon">📄</span>
+                                    <span class="file-name">document_1mb.pdf</span>
+                                    <span class="file-size">1 MB</span>
+                                </div>
+                                <div class="file-item" data-filename="video_10mb.mp4" data-size="10485760" data-owner="alice">
+                                    <span class="file-icon">🎥</span>
+                                    <span class="file-name">video_10mb.mp4</span>
+                                    <span class="file-size">10 MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transfer Direction Selector -->
+                    <div class="transfer-selector">
+                        <h3>Select Transfer Direction</h3>
+                        <div class="direction-options">
+                            <label class="direction-option">
+                                <input type="radio" name="direction" value="alice-to-bob" checked>
+                                <span class="direction-label">Alice → Bob</span>
+                            </label>
+                            <label class="direction-option">
+                                <input type="radio" name="direction" value="bob-to-alice">
+                                <span class="direction-label">Bob → Alice</span>
+                            </label>
+                        </div>
+                        
+                        <div class="custom-file-upload">
+                            <h3>Or Upload Custom File</h3>
+                            <input type="file" id="custom-file" accept="*/*">
+                            <label for="custom-file" class="file-upload-btn">📁 Choose File</label>
+                            <span id="custom-file-name"></span>
+                        </div>
+
+                        <button id="start-btn" class="primary-btn">▶ Start Transfer</button>
+                    </div>
+
+                    <!-- Bob -->
+                    <div class="party bob-party">
+                        <div class="party-header">
+                            <img src="{{ url_for('static', filename='bob-image.jpg') }}" alt="Bob" class="party-avatar">
+                            <h2>Bob</h2>
+                        </div>
+                        <div class="party-status">
+                            <span class="status-badge">Ready</span>
+                        </div>
+                        <div class="party-info">
+                            <h3>Files Available:</h3>
+                            <div class="file-list" id="bob-files">
+                                <div class="file-item" data-filename="report_1kb.pdf" data-size="1024" data-owner="bob">
+                                    <span class="file-icon">📄</span>
+                                    <span class="file-name">report_1kb.pdf</span>
+                                    <span class="file-size">1 KB</span>
+                                </div>
+                                <div class="file-item" data-filename="data_1mb.json" data-size="1048576" data-owner="bob">
+                                    <span class="file-icon">📊</span>
+                                    <span class="file-name">data_1mb.json</span>
+                                    <span class="file-size">1 MB</span>
+                                </div>
+                                <div class="file-item" data-filename="archive_10mb.zip" data-size="10485760" data-owner="bob">
+                                    <span class="file-icon">🗜️</span>
+                                    <span class="file-name">archive_10mb.zip</span>
+                                    <span class="file-size">10 MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 1: Generate Keys -->
+            <section id="step-1" class="step-section">
+                <div class="step-header">
+                    <h2>Step 1: Generate RSA Keypairs</h2>
+                    <p>Both Alice and Bob generate two RSA-2048 keypairs each: one for signing (identity) and one for encryption</p>
+                </div>
+                <div class="key-generation-container">
+                    <div class="key-gen-party">
+                        <div class="party-header-with-avatar">
+                            <img src="{{ url_for('static', filename='alice-image.jpg') }}" alt="Alice" class="party-avatar-small">
+                            <h3>Alice's Keys</h3>
+                        </div>
+                        <div class="key-display">
+                            <div class="key-box">
+                                <h4>🔑 Signing Keypair (RSA-PSS)</h4>
+                                <p class="key-purpose">Used for creating digital signatures</p>
+                                <div class="key-pair-container">
+                                    <div class="key-item">
+                                        <span class="key-label">🔓 Public Key</span>
+                                        <div class="key-animation public-key" id="alice-signing-key-public"></div>
+                                    </div>
+                                    <div class="key-item">
+                                        <span class="key-label">🔒 Private Key <span class="toggle-hint">(click to reveal)</span></span>
+                                        <div class="key-animation private-key hidden" id="alice-signing-key-private" onclick="toggleKeyVisibility(this)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="key-box">
+                                <h4>🔐 Encryption Keypair (RSA-OAEP)</h4>
+                                <p class="key-purpose">Used for key wrapping</p>
+                                <div class="key-pair-container">
+                                    <div class="key-item">
+                                        <span class="key-label">🔓 Public Key</span>
+                                        <div class="key-animation public-key" id="alice-encryption-key-public"></div>
+                                    </div>
+                                    <div class="key-item">
+                                        <span class="key-label">🔒 Private Key <span class="toggle-hint">(click to reveal)</span></span>
+                                        <div class="key-animation private-key hidden" id="alice-encryption-key-private" onclick="toggleKeyVisibility(this)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="key-gen-party">
+                        <div class="party-header-with-avatar">
+                            <img src="{{ url_for('static', filename='bob-image.jpg') }}" alt="Bob" class="party-avatar-small">
+                            <h3>Bob's Keys</h3>
+                        </div>
+                        <div class="key-display">
+                            <div class="key-box">
+                                <h4>🔑 Signing Keypair (RSA-PSS)</h4>
+                                <p class="key-purpose">Used for creating digital signatures</p>
+                                <div class="key-pair-container">
+                                    <div class="key-item">
+                                        <span class="key-label">🔓 Public Key</span>
+                                        <div class="key-animation public-key" id="bob-signing-key-public"></div>
+                                    </div>
+                                    <div class="key-item">
+                                        <span class="key-label">🔒 Private Key <span class="toggle-hint">(click to reveal)</span></span>
+                                        <div class="key-animation private-key hidden" id="bob-signing-key-private" onclick="toggleKeyVisibility(this)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="key-box">
+                                <h4>🔐 Encryption Keypair (RSA-OAEP)</h4>
+                                <p class="key-purpose">Used for key wrapping</p>
+                                <div class="key-pair-container">
+                                    <div class="key-item">
+                                        <span class="key-label">🔓 Public Key</span>
+                                        <div class="key-animation public-key" id="bob-encryption-key-public"></div>
+                                    </div>
+                                    <div class="key-item">
+                                        <span class="key-label">🔒 Private Key <span class="toggle-hint">(click to reveal)</span></span>
+                                        <div class="key-animation private-key hidden" id="bob-encryption-key-private" onclick="toggleKeyVisibility(this)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 2: Key Exchange & Binding -->
+            <section id="step-2" class="step-section">
+                <div class="step-header">
+                    <h2>Step 2: Exchange & Bind Public Keys</h2>
+                    <p>Each party hashes their encryption public key with SHA-256, then signs the hash using their private signing key to create a cryptographic binding that prevents MITM attacks</p>
+                </div>
+                
+                <div class="key-exchange-container-v2">
+                    <!-- Alice's Binding Process -->
+                    <div class="binding-process">
+                        <div class="party-header-with-avatar">
+                            <img src="{{ url_for('static', filename='alice-image.jpg') }}" alt="Alice" class="party-avatar-small">
+                            <h3>Alice's Key Binding</h3>
+                        </div>
+                        
+                        <div class="binding-visualization">
+                            <!-- Step 1: Take Public Key -->
+                            <div class="binding-step visible-stage" data-stage="0">
+                                <div class="step-icon">🔓</div>
+                                <h4>Encryption Public Key</h4>
+                                <div class="key-preview" id="alice-pub-key-preview">
+                                    <code>-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+-----END PUBLIC KEY-----</code>
+                                </div>
+                            </div>
+                            
+                            <!-- Step 2: Hash It -->
+                            <div class="binding-step highlighted" data-stage="1">
+                                <div class="step-icon">🔢</div>
+                                <h4>Apply SHA-256 Hash Function</h4>
+                                <div class="hash-visualization">
+                                    <div class="hash-input">Public Key (2048 bits)</div>
+                                    <div class="hash-arrow">→ SHA-256 →</div>
+                                    <div class="hash-output" id="alice-key-hash-visual">Hash (256 bits)</div>
+                                </div>
+                                <div class="hash-result" id="alice-key-hash"></div>
+                            </div>
+                            
+                            <!-- Step 3: Sign It -->
+                            <div class="binding-step highlighted" data-stage="2">
+                                <div class="step-icon">✍️</div>
+                                <h4>Sign with Private Signing Key (RSA-PSS)</h4>
+                                <div class="signing-visualization">
+                                    <div class="sign-process">
+                                        <div class="sign-input-box">
+                                            <span class="sign-label">Hash</span>
+                                            <span class="plus-sign">+</span>
+                                            <span class="sign-label">🔒 Private Key</span>
+                                        </div>
+                                        <div class="sign-arrow">→</div>
+                                        <div class="sign-output-box">
+                                            <span class="sign-label">Digital Signature</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="signature-result" id="alice-signature"></div>
+                            </div>
+                            
+                            <!-- Final Package -->
+                            <div class="binding-step success" data-stage="3">
+                                <div class="step-icon">📦</div>
+                                <h4>Signed Public Key Package</h4>
+                                <div class="package-contents">
+                                    <div class="package-item">
+                                        <span class="package-icon">🔓</span>
+                                        <span>Encryption Public Key</span>
+                                    </div>
+                                    <div class="package-item">
+                                        <span class="package-icon">✍️</span>
+                                        <span>Digital Signature</span>
+                                    </div>
+                                </div>
+                                <p class="package-note">Ready to send to Bob!</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Exchange Arrow -->
+                    <div class="exchange-center" id="exchange-center">
+                        <div class="exchange-arrow-static">
+                            <div class="arrow-line"></div>
+                            <span class="exchange-icon" id="exchange-icon">📝</span>
+                            <div class="exchange-label" id="exchange-label">Preparing Packages</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bob's Binding Process -->
+                    <div class="binding-process">
+                        <div class="party-header-with-avatar">
+                            <img src="{{ url_for('static', filename='bob-image.jpg') }}" alt="Bob" class="party-avatar-small">
+                            <h3>Bob's Key Binding</h3>
+                        </div>
+                        
+                        <div class="binding-visualization">
+                            <!-- Step 1: Take Public Key -->
+                            <div class="binding-step visible-stage" data-stage="0">
+                                <div class="step-icon">🔓</div>
+                                <h4>Encryption Public Key</h4>
+                                <div class="key-preview" id="bob-pub-key-preview">
+                                    <code>-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+-----END PUBLIC KEY-----</code>
+                                </div>
+                            </div>
+                            
+                            <!-- Step 2: Hash It -->
+                            <div class="binding-step highlighted" data-stage="1">
+                                <div class="step-icon">🔢</div>
+                                <h4>Apply SHA-256 Hash Function</h4>
+                                <div class="hash-visualization">
+                                    <div class="hash-input">Public Key (2048 bits)</div>
+                                    <div class="hash-arrow">→ SHA-256 →</div>
+                                    <div class="hash-output" id="bob-key-hash-visual">Hash (256 bits)</div>
+                                </div>
+                                <div class="hash-result" id="bob-key-hash"></div>
+                            </div>
+                            
+                            <!-- Step 3: Sign It -->
+                            <div class="binding-step highlighted" data-stage="2">
+                                <div class="step-icon">✍️</div>
+                                <h4>Sign with Private Signing Key (RSA-PSS)</h4>
+                                <div class="signing-visualization">
+                                    <div class="sign-process">
+                                        <div class="sign-input-box">
+                                            <span class="sign-label">Hash</span>
+                                            <span class="plus-sign">+</span>
+                                            <span class="sign-label">🔒 Private Key</span>
+                                        </div>
+                                        <div class="sign-arrow">→</div>
+                                        <div class="sign-output-box">
+                                            <span class="sign-label">Digital Signature</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="signature-result" id="bob-signature"></div>
+                            </div>
+                            
+                            <!-- Final Package -->
+                            <div class="binding-step success" data-stage="3">
+                                <div class="step-icon">📦</div>
+                                <h4>Signed Public Key Package</h4>
+                                <div class="package-contents">
+                                    <div class="package-item">
+                                        <span class="package-icon">🔓</span>
+                                        <span>Encryption Public Key</span>
+                                    </div>
+                                    <div class="package-item">
+                                        <span class="package-icon">✍️</span>
+                                        <span>Digital Signature</span>
+                                    </div>
+                                </div>
+                                <p class="package-note">Ready to send to Alice!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="binding-stage-controls">
+                    <button type="button" class="binding-stage-arrow" id="binding-stage-prev" aria-label="Show previous binding step">
+                        ←
+                    </button>
+                    <div class="binding-stage-indicator" id="binding-stage-indicator">
+                        Stage 1 of 4 · Encryption Public Key
+                    </div>
+                    <button type="button" class="binding-stage-arrow" id="binding-stage-next" aria-label="Show next binding step">
+                        →
+                    </button>
+                </div>
+                
+                <!-- Verification Summary -->
+                <div class="verification-status">
+                    <div class="verify-box-v2 pending" id="binding-verify-box">
+                        <div class="verify-icon-large" id="binding-verify-icon">⏳</div>
+                        <h3 id="binding-verify-title">Awaiting Verification</h3>
+                        <p class="verify-explanation" id="binding-verify-description">Once both parties sign each other's encryption public keys, we will run RSA-PSS verification to confirm authenticity.</p>
+                    </div>
+                </div>
+                
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 3: File Encryption (AES-GCM) -->
+            <section id="step-3" class="step-section">
+                <div class="step-header">
+                    <h2>Step 3: Encrypt File with AES-256-GCM</h2>
+                    <p>Sender generates a random AES key and encrypts the file</p>
+                </div>
+                <div class="encryption-container">
+                    <div class="encryption-flow-improved">
+                        <!-- Original File Box -->
+                        <div class="file-state">
+                            <h3>📂 Original File</h3>
+                            <div class="file-preview" id="original-file-preview">
+                                <div class="file-icon-large">📄</div>
+                                <p class="file-name-large" id="selected-filename">Loading...</p>
+                                <p class="file-size-large" id="selected-filesize">0 KB</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Arrow Right -->
+                        <div class="arrow-right-big">
+                            <div class="arrow-label">ENCRYPT</div>
+                            <div class="arrow-body">➡</div>
+                        </div>
+                        
+                        <!-- Encryption Process Box -->
+                        <div class="encryption-process-box">
+                            <h3>🔐 AES-256-GCM Encryption Process</h3>
+                            <div class="process-steps-vertical">
+                                <div class="process-step-inline">
+                                    <span class="process-icon-small">🔑</span>
+                                    <div class="process-info">
+                                        <h4>1. Generate Random AES-256 Key</h4>
+                                        <div class="aes-key-display" id="aes-key"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="arrow-down-inline">⬇</div>
+                                
+                                <div class="process-step-inline">
+                                    <span class="process-icon-small">🎲</span>
+                                    <div class="process-info">
+                                        <h4>2. Generate Random Nonce</h4>
+                                        <div class="detail-text" id="nonce-display"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="arrow-down-inline">⬇</div>
+                                
+                                <div class="process-step-inline">
+                                    <span class="process-icon-small">📝</span>
+                                    <div class="process-info">
+                                        <h4>3. Add Metadata (AAD)</h4>
+                                        <div class="detail-text" id="aad-display"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="arrow-down-inline">⬇</div>
+                                
+                                <div class="process-step-inline clickable" onclick="showAESDetailsModal()">
+                                    <span class="process-icon-small">⚙️</span>
+                                    <div class="process-info">
+                                        <h4>4. Perform AES-GCM Encryption</h4>
+                                        <div class="detail-text">Time: <span id="encrypt-time"></span></div>
+                                        <p class="click-hint">Click to see how AES-GCM works</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Arrow Right -->
+                        <div class="arrow-right-big">
+                            <div class="arrow-label">OUTPUT</div>
+                            <div class="arrow-body">➡</div>
+                        </div>
+                        
+                        <!-- Encrypted File Box -->
+                        <div class="file-state">
+                            <h3>🔒 Encrypted File</h3>
+                            <div class="file-preview encrypted" id="encrypted-file-preview">
+                                <div class="ciphertext-display" id="ciphertext-preview"></div>
+                                <p class="cipher-label">Ciphertext + Authentication Tag</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 4: Wrap AES Key (RSA-OAEP) -->
+            <section id="step-4" class="step-section">
+                <div class="step-header">
+                    <h2>Step 4: Wrap AES Key with RSA-OAEP</h2>
+                    <p>Encrypt the AES key using receiver's RSA public key so only they can decrypt</p>
+                </div>
+                <div class="key-wrap-container">
+                    <div class="wrap-flow">
+                        <div class="wrap-item">
+                            <h3>AES Key (32 bytes)</h3>
+                            <div class="key-box-display" id="aes-key-unwrapped"></div>
+                        </div>
+                        
+                        <div class="wrap-process clickable" onclick="showRSADetailsModal()">
+                            <div class="wrap-icon">🔒</div>
+                            <p>RSA-OAEP Encryption</p>
+                            <p class="wrap-detail">Using <span id="receiver-name">Receiver</span>'s Public Key</p>
+                            <p class="click-hint">Click to see how RSA-OAEP works</p>
+                        </div>
+                        
+                        <div class="wrap-item">
+                            <h3>Wrapped Key (256 bytes - RSA-2048 output)</h3>
+                            <div class="key-box-display wrapped" id="wrapped-key-display"></div>
+                        </div>
+                    </div>
+                    <div class="wrap-info">
+                        <p>✅ Only <span id="receiver-name-2">receiver</span> with their private key can unwrap this key</p>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 5: Sign Envelope (RSA-PSS) -->
+            <section id="step-5" class="step-section">
+                <div class="step-header">
+                    <h2>Step 5: Sign Envelope with RSA-PSS</h2>
+                    <p>Sender signs the entire envelope to ensure authenticity and integrity</p>
+                </div>
+                <div class="signing-container">
+                    <!-- Signing Process Flow -->
+                    <div class="signing-flow-section">
+                        <h3 class="section-title">🔐 How the Signature is Created</h3>
+                        <div class="signing-steps-flow">
+                            <div class="flow-step">
+                                <div class="flow-step-number">1</div>
+                                <div class="flow-step-content">
+                                    <h4>Envelope Before Signing</h4>
+                                    <div class="mini-envelope-display" id="envelope-json"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="flow-arrow">→</div>
+                            
+                            <div class="flow-step">
+                                <div class="flow-step-number">2</div>
+                                <div class="flow-step-content">
+                                    <h4>Hash (SHA-256)</h4>
+                                    <div class="flow-hash-display" id="envelope-hash"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="flow-arrow">→</div>
+                            
+                            <div class="flow-step">
+                                <div class="flow-step-number">3</div>
+                                <div class="flow-step-content">
+                                    <h4>Sign with RSA-PSS</h4>
+                                    <p class="flow-description">Using <span id="sender-name">Sender</span>'s private key</p>
+                                    <div class="flow-signature-display" id="envelope-signature"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Final Result -->
+                    <div class="signing-result-section">
+                        <h3 class="section-title">📤 Signed Envelope (Final Result)</h3>
+                        <p class="section-description">The signature is appended to the envelope as a new field. This complete package is sent to the receiver:</p>
+                        <div class="final-envelope-display" id="signed-envelope-preview"></div>
+                        <div class="result-info">
+                            <div class="info-badge">
+                                <span class="badge-icon">✓</span>
+                                <span>Original data unchanged</span>
+                            </div>
+                            <div class="info-badge">
+                                <span class="badge-icon">🔒</span>
+                                <span>Signature proves authenticity</span>
+                            </div>
+                            <div class="info-badge">
+                                <span class="badge-icon">📦</span>
+                                <span>Ready for transfer</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 6: Transfer with Attack Simulation -->
+            <section id="step-6" class="step-section">
+                <div class="step-header">
+                    <h2>Step 6: Transfer Encrypted Envelope</h2>
+                    <p>Watch the encrypted data travel from sender to receiver - optionally simulate an attack</p>
+                </div>
+                <div class="transfer-container">
+                    <div class="transfer-visualization">
+                        <div class="transfer-party sender" id="transfer-sender">
+                            <img src="{{ url_for('static', filename='alice-image.jpg') }}" alt="Sender" class="transfer-avatar" id="sender-avatar">
+                            <h3 id="sender-label">Alice</h3>
+                            <div class="transfer-status">Sending...</div>
+                        </div>
+                        
+                        <div class="transfer-path">
+                            <div class="packet" id="transfer-packet">
+                                <div class="packet-icon">📦</div>
+                                <p>Encrypted Envelope</p>
+                            </div>
+                            <div class="path-line"></div>
+                            <button class="intercept-btn" id="intercept-btn">
+                                ⚠️ SIMULATE ATTACK
+                            </button>
+                        </div>
+                        
+                        <div class="transfer-party receiver" id="transfer-receiver">
+                            <img src="{{ url_for('static', filename='bob-image.jpg') }}" alt="Receiver" class="transfer-avatar" id="receiver-avatar">
+                            <h3 id="receiver-label">Bob</h3>
+                            <div class="transfer-status">Waiting...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Attack Simulation Modal -->
+            <div id="attack-modal" class="modal">
+                <div class="modal-content attack-modal-content">
+                    <div class="modal-header">
+                        <h2>⚠️ Attack Simulation</h2>
+                        <button class="close-modal" onclick="closeAttackModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <p class="panel-description">Select ONE attack type to simulate on the encrypted envelope in transit</p>
+                        
+                        <div class="attack-type-selection" id="attack-type-selection">
+                            <div class="attack-radio-option">
+                                <input type="radio" id="attack-tamper" name="attack-type" value="tamper">
+                                <label for="attack-tamper">
+                                    <div class="attack-label-header">
+                                        <span class="attack-icon">🔧</span>
+                                        <h4>Tamper with Ciphertext</h4>
+                                    </div>
+                                    <p>Modify encrypted data to corrupt the message</p>
+                                </label>
+                            </div>
+                            
+                            <div class="attack-radio-option">
+                                <input type="radio" id="attack-replay" name="attack-type" value="replay">
+                                <label for="attack-replay">
+                                    <div class="attack-label-header">
+                                        <span class="attack-icon">🔄</span>
+                                        <h4>Replay Attack</h4>
+                                    </div>
+                                    <p>Resend old envelope (nonce reuse)</p>
+                                </label>
+                            </div>
+                            
+                            <div class="attack-radio-option">
+                                <input type="radio" id="attack-mitm" name="attack-type" value="mitm">
+                                <label for="attack-mitm">
+                                    <div class="attack-label-header">
+                                        <span class="attack-icon">👤</span>
+                                        <h4>Man-in-the-Middle</h4>
+                                    </div>
+                                    <p>Intercept and modify digital signature</p>
+                                </label>
+                            </div>
+                            
+                            <div class="attack-radio-option">
+                                <input type="radio" id="attack-timing" name="attack-type" value="timing">
+                                <label for="attack-timing">
+                                    <div class="attack-label-header">
+                                        <span class="attack-icon">⏱️</span>
+                                        <h4>Timing Attack</h4>
+                                    </div>
+                                    <p>Measure verification time to extract secrets</p>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="attack-actions" id="attack-actions">
+                            <button class="apply-attack-btn" id="apply-attack-btn" disabled>Apply Attack</button>
+                            <button class="cancel-attack-btn" id="cancel-attack-btn">Continue Without Attack</button>
+                        </div>
+                        
+                        <!-- Attack Results Display -->
+                        <div class="attack-result-display" id="attack-result-display" style="display: none;">
+                            <h3>📊 Attack Applied</h3>
+                            <div class="attack-description" id="attack-description"></div>
+                            
+                            <h4>Changes to Envelope:</h4>
+                            <div class="envelope-diff-container">
+                                <div class="envelope-diff-column">
+                                    <h5>Original Envelope</h5>
+                                    <div class="envelope-data original" id="original-envelope-display"></div>
+                                </div>
+                                <div class="envelope-diff-column">
+                                    <h5>Tampered Envelope</h5>
+                                    <div class="envelope-data tampered" id="tampered-envelope-display"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="modifications-list" id="modifications-list"></div>
+                            
+                            <p class="attack-warning">⚠️ The tampered envelope will now be delivered to the receiver. Step 7 will detect this attack during signature verification.</p>
+                            
+                            <div class="attack-result-actions">
+                                <button class="primary-btn" onclick="closeAttackModal()">Close & Continue to Step 7</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 7: Verify Signature -->
+            <section id="step-7" class="step-section">
+                <div class="step-header">
+                    <h2>Step 7: Verify Digital Signature</h2>
+                    <p>Bob receives the envelope from Alice and verifies its authenticity</p>
+                </div>
+                
+                <div class="verification-container">
+                    <!-- Step 1: Show received envelope (same as sent) -->
+                    <div class="verify-compact-step">
+                        <div class="step-number-badge">1</div>
+                        <h3>📬 Bob Receives the Signed Envelope</h3>
+                        <p class="step-description">This is the complete envelope that Bob received from Alice</p>
+                        <div class="envelope-box-compact" id="received-envelope"></div>
+                    </div>
+                    
+                    <!-- Step 2: Extract signature and verify -->
+                    <div class="verify-compact-step">
+                        <div class="step-number-badge">2</div>
+                        <h3>🔍 Verification Process</h3>
+                        <p class="step-description">Bob extracts the signature from the envelope and recreates the SHA-256 hash from the envelope data</p>
+                        
+                        <div class="verification-substeps">
+                            <div class="substep">
+                                <span class="substep-label">2a. Extract Signature:</span>
+                                <div class="signature-display-compact" id="verify-signature"></div>
+                            </div>
+                            
+                            <div class="substep">
+                                <span class="substep-label">2b. Compute Hash from Envelope Data:</span>
+                                <div class="hash-display-compact" id="verify-hash"></div>
+                            </div>
+                            
+                            <div class="substep">
+                                <span class="substep-label">2c. Verify using <span id="verify-sender-name">Alice</span>'s Public Key:</span>
+                                <p class="substep-note">Bob uses Alice's public key to decrypt the signature and compare it with the computed hash</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Show verification result OR attack detection -->
+                    <div class="verify-compact-step" id="verification-outcome-step">
+                        <div class="step-number-badge">3</div>
+                        <h3>🎯 Verification Result</h3>
+                        
+                        <!-- Success Case -->
+                        <div class="verification-result-compact" id="verification-result">
+                            <div class="verify-status-badge">✅ SIGNATURE VALID</div>
+                            <div class="verify-details">
+                                <p>✓ Signature matches computed hash</p>
+                                <p>✓ Envelope has not been tampered with</p>
+                                <p>✓ Confirmed sender: <span id="verify-sender-name-2">Alice</span></p>
+                                <p class="verify-time-text">Verification time: <span id="verify-time"></span></p>
+                            </div>
+                        </div>
+                        
+                        <!-- Attack Detection Case -->
+                        <div class="attack-detection-result" id="attack-detection-alert" style="display: none;">
+                            <div class="attack-alert-header">
+                                <span class="alert-icon">🚨</span>
+                                <h4>SIGNATURE VERIFICATION FAILED - ATTACK DETECTED</h4>
+                            </div>
+                            <div class="attack-alert-body">
+                                <div class="attack-summary">
+                                    <div class="attack-type-label">
+                                        <strong id="detected-attack-name">Attack Type</strong>
+                                    </div>
+                                    <p id="detected-attack-description">Description</p>
+                                </div>
+                                
+                                <div class="attack-details-grid">
+                                    <div class="attack-detail-item">
+                                        <h5>🔍 Detection Method:</h5>
+                                        <p id="detection-method"></p>
+                                    </div>
+                                    
+                                    <div class="attack-detail-item">
+                                        <h5>⚠️ Security Impact:</h5>
+                                        <p id="security-impact"></p>
+                                    </div>
+                                    
+                                    <div class="attack-detail-item">
+                                        <h5>🛡️ Protection:</h5>
+                                        <p id="blocked-by"></p>
+                                    </div>
+                                </div>
+                                
+                                <div class="tampering-evidence" id="tampering-evidence-container" style="display: none;">
+                                    <h5>📋 Evidence of Tampering:</h5>
+                                    <div id="tampering-evidence-list"></div>
+                                </div>
+                                
+                                <div class="security-recommendation">
+                                    <strong>⛔ SECURITY RECOMMENDATION:</strong>
+                                    <p id="security-recommendation">DO NOT PROCEED TO DECRYPTION - ENVELOPE IS COMPROMISED</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="step-navigation" id="step-7-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" id="step-7-next-btn" onclick="nextStep()">Continue →</button>
+                    <button class="restart-btn" id="step-7-restart-btn" onclick="location.reload()" style="display: none;">🔄 Restart Demo</button>
+                </div>
+            </section>
+
+            <!-- Step 8: Decrypt File -->
+            <section id="step-8" class="step-section">
+                <div class="step-header">
+                    <h2>Step 8: Decrypt File</h2>
+                    <p>Receiver unwraps the AES key and decrypts the file</p>
+                </div>
+                <div class="decryption-container">
+                    <div class="decrypt-flow">
+                        <div class="decrypt-step">
+                            <h3>Step 1: Unwrap AES Key</h3>
+                            <div class="unwrap-display">
+                                <div class="key-box-display wrapped">
+                                    <p>Wrapped Key</p>
+                                    <div id="wrapped-key-decrypt"></div>
+                                </div>
+                                <span class="decrypt-arrow">→</span>
+                                <div class="unwrap-process clickable" onclick="showRSADecryptModal()">
+                                    <span class="process-icon">🔓</span>
+                                    <p>RSA-OAEP Decrypt</p>
+                                    <p class="detail">Using private key</p>
+                                    <p class="click-hint">Click to see how RSA unwrapping works</p>
+                                </div>
+                                <span class="decrypt-arrow">→</span>
+                                <div class="key-box-display">
+                                    <div id="unwrapped-key"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="decrypt-step">
+                            <h3>Step 2: Decrypt File with AES-GCM</h3>
+                            <div class="aes-decrypt-display">
+                                <div class="decrypt-inputs">
+                                    <p><strong>Ciphertext:</strong> <span id="decrypt-ciphertext"></span></p>
+                                    <p><strong>Nonce:</strong> <span id="decrypt-nonce"></span></p>
+                                    <p><strong>Tag:</strong> <span id="decrypt-tag"></span></p>
+                                </div>
+                                <div class="decrypt-action clickable" onclick="showAESDecryptModal()">
+                                    <span class="process-icon">🔐</span>
+                                    <p>AES-256-GCM Decrypt</p>
+                                    <p class="detail">Time: <span id="decrypt-time"></span></p>
+                                    <p class="click-hint">Click to see how AES-GCM decryption works</p>
+                                </div>
+                                <div class="decrypted-file">
+                                    <h4>✅ Decrypted File</h4>
+                                    <div class="file-preview" id="decrypted-file-preview">
+                                        <div class="file-icon-large">📄</div>
+                                        <p class="file-name-large" id="decrypted-filename"></p>
+                                        <p class="file-size-large" id="decrypted-filesize"></p>
+                                    </div>
+                                    <button type="button" class="download-btn" id="download-decrypted-btn" disabled>
+                                        ⬇ Download Decrypted File
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="next-btn" onclick="nextStep()">Continue →</button>
+                </div>
+            </section>
+
+            <!-- Step 9: File Integrity Comparison -->
+            <section id="step-9" class="step-section">
+                <div class="step-header">
+                    <h2>Step 9: Verify File Integrity</h2>
+                    <p>Compare SHA-256 hashes to confirm bit-perfect transfer</p>
+                </div>
+                <div class="integrity-container">
+                    <div class="hash-comparison">
+                        <div class="hash-item">
+                            <h3>Original File Hash</h3>
+                            <div class="hash-display-large" id="original-hash"></div>
+                        </div>
+                        
+                        <div class="comparison-arrow">
+                            <span class="compare-icon">⚖️</span>
+                        </div>
+                        
+                        <div class="hash-item">
+                            <h3>Received File Hash</h3>
+                            <div class="hash-display-large" id="received-hash"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="integrity-result">
+                        <div class="result-box success">
+                            <span class="result-icon">✅</span>
+                            <h3>Perfect Match</h3>
+                            <p>File transferred securely with zero data loss</p>
+                        </div>
+                    </div>
+                    
+                    <div class="transfer-summary-grid">
+                        <div class="summary-card">
+                            <div class="summary-icon">📊</div>
+                            <div class="summary-content">
+                                <h4>Transfer Details</h4>
+                                <div class="summary-metrics">
+                                    <div class="summary-metric">
+                                        <span class="sm-label">File Size</span>
+                                        <span class="sm-value" id="final-size"></span>
+                                    </div>
+                                    <div class="summary-metric">
+                                        <span class="sm-label">Total Time</span>
+                                        <span class="sm-value" id="final-time"></span>
+                                    </div>
+                                    <div class="summary-metric">
+                                        <span class="sm-label">Encryption</span>
+                                        <span class="sm-value">AES-256-GCM</span>
+                                    </div>
+                                    <div class="summary-metric">
+                                        <span class="sm-label">Key Exchange</span>
+                                        <span class="sm-value">RSA-2048</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="summary-card">
+                            <div class="summary-icon">🛡️</div>
+                            <div class="summary-content">
+                                <h4>Security Protections</h4>
+                                <div class="protection-badges">
+                                    <div class="protection-badge">
+                                        <span class="badge-icon">🔒</span>
+                                        <span class="badge-text">MITM Protected</span>
+                                    </div>
+                                    <div class="protection-badge">
+                                        <span class="badge-icon">🔄</span>
+                                        <span class="badge-text">Replay Resistant</span>
+                                    </div>
+                                    <div class="protection-badge">
+                                        <span class="badge-icon">✓</span>
+                                        <span class="badge-text">Tamper-Proof</span>
+                                    </div>
+                                    <div class="protection-badge">
+                                        <span class="badge-icon">⏱️</span>
+                                        <span class="badge-text">Timing Safe</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-navigation">
+                    <button class="back-btn" onclick="previousStep()">← Back</button>
+                    <button class="restart-btn" onclick="restartDemo()">🔄 Start New Transfer</button>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Progress Stepper -->
+        <div class="progress-stepper">
+            <div class="step" data-step="0">
+                <span class="step-number">0</span>
+                <span class="step-label">Setup</span>
+            </div>
+            <div class="step" data-step="1">
+                <span class="step-number">1</span>
+                <span class="step-label">Generate Keys</span>
+            </div>
+            <div class="step" data-step="2">
+                <span class="step-number">2</span>
+                <span class="step-label">Exchange Keys</span>
+            </div>
+            <div class="step" data-step="3">
+                <span class="step-number">3</span>
+                <span class="step-label">Encrypt</span>
+            </div>
+            <div class="step" data-step="4">
+                <span class="step-number">4</span>
+                <span class="step-label">Wrap Key</span>
+            </div>
+            <div class="step" data-step="5">
+                <span class="step-number">5</span>
+                <span class="step-label">Sign</span>
+            </div>
+            <div class="step" data-step="6">
+                <span class="step-number">6</span>
+                <span class="step-label">Transfer</span>
+            </div>
+            <div class="step" data-step="7">
+                <span class="step-number">7</span>
+                <span class="step-label">Verify</span>
+            </div>
+            <div class="step" data-step="8">
+                <span class="step-number">8</span>
+                <span class="step-label">Decrypt</span>
+            </div>
+            <div class="step" data-step="9">
+                <span class="step-number">9</span>
+                <span class="step-label">Compare</span>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

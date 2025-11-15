@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Decryption Tool - Secure File Exchange</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <div class="tool-page">
+    <!-- Navigation -->
+    <nav class="tool-nav">
+        <a href="/" class="nav-logo">
+            <span class="nav-logo-icon">🔐</span>
+            <span class="nav-logo-text">CypherLink</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Home</a>
+            <a href="/keys" class="nav-link">Keys</a>
+            <a href="/demo" class="nav-link">Demo</a>
+            <a href="/encrypt" class="nav-link">Encrypt</a>
+            <a href="/decrypt" class="nav-link active">Decrypt</a>
+        </div>
+    </nav>        <!-- Main Content -->
+        <div class="tool-container">
+            <div class="tool-header">
+                <div class="tool-icon">🔓</div>
+                <h1>Secure File Decryption</h1>
+                <p class="tool-subtitle">Hybrid Cryptography: RSA-PSS Verification + RSA-OAEP + AES-256-GCM</p>
+            </div>
+
+            <!-- Decryption Process -->
+            <div class="tool-content">
+                
+                <!-- Step 1: Upload Envelope and Key -->
+                <div id="upload-section" class="tool-section active">
+                    <div class="section-header">
+                        <h2>📋 Required Inputs</h2>
+                        <p>Provide the encrypted envelope and your private key to decrypt</p>
+                    </div>
+
+                    <!-- Envelope Upload -->
+                    <div class="input-group">
+                        <label class="input-label">
+                            <span class="label-icon">📦</span>
+                            <span class="label-text">1. Encrypted Envelopes</span>
+                            <span class="label-hint">Select one or multiple .json files</span>
+                        </label>
+                        <div class="upload-zone" id="upload-zone">
+                            <input type="file" id="envelope-input" accept=".json,application/json" multiple hidden>
+                            <div class="upload-content">
+                                <div class="upload-icon">📤</div>
+                                <h3>Drop envelope files here</h3>
+                                <p>or click to browse (multiple files supported)</p>
+                                <button class="upload-button" onclick="document.getElementById('envelope-input').click()">
+                                    Choose Envelopes (.json)
+                                </button>
+                            </div>
+                        </div>
+                        <div id="envelopes-list-container" class="files-list-container" style="display: none;">
+                            <div class="files-list-header">
+                                <span><strong id="envelopes-count">0</strong> envelope(s) selected</span>
+                                <button class="clear-all-btn" onclick="clearAllEnvelopes()">Clear All</button>
+                            </div>
+                            <div id="envelopes-list" class="files-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recipient Private Key Upload -->
+                    <div class="input-group">
+                        <label class="input-label">
+                            <span class="label-icon">🔑</span>
+                            <span class="label-text">2. Your Private Key (Recipient)</span>
+                            <span class="label-hint">Used to unwrap the encryption key</span>
+                        </label>
+                        <div class="key-upload">
+                            <input type="file" id="recipient-key-input" accept=".pem,.key,.txt" hidden>
+                            <button class="key-upload-btn" onclick="document.getElementById('recipient-key-input').click()">
+                                <span class="btn-icon">📎</span>
+                                Upload Your Private Key
+                            </button>
+                            <div id="recipient-key-info" class="key-preview" style="display: none;">
+                                <span class="key-icon">🔐</span>
+                                <span id="recipient-key-name" class="key-name">-</span>
+                                <button class="key-remove" onclick="removeRecipientKey()">✕</button>
+                            </div>
+                        </div>
+                        <p class="input-hint">⚠️ Your private key is never sent to the server - decryption happens securely</p>
+                    </div>
+
+                    <!-- Action Button -->
+                    <div class="action-section">
+                        <button id="decrypt-btn" class="primary-btn large-btn" disabled>
+                            🔓 Decrypt & Verify Files
+                        </button>
+                        <p class="action-hint" id="action-hint">Both inputs are required to proceed</p>
+                    </div>
+                </div>
+
+                <!-- Step 2: Decryption Progress -->
+                <div id="progress-section" class="tool-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>⚙️ Decrypting Your Files</h2>
+                        <p>Processing <span id="progress-current">1</span> of <span id="progress-total">1</span> files...</p>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="batch-progress">
+                            <div class="batch-progress-bar">
+                                <div class="batch-progress-fill" id="batch-progress-fill"></div>
+                            </div>
+                            <div class="batch-progress-text" id="batch-progress-text">0%</div>
+                        </div>
+                        <div id="files-progress-list" class="files-progress-list"></div>
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Download Decrypted File -->
+                <div id="result-section" class="tool-section" style="display: none;">
+                    <div class="section-header success">
+                        <div class="success-icon">✅</div>
+                        <h2>Decryption Successful!</h2>
+                        <p><span id="success-count">1</span> file(s) decrypted and verified</p>
+                    </div>
+
+                    <div class="result-container">
+                        <div class="result-info">
+                            <!-- Compact Batch Summary -->
+                            <div class="batch-summary-compact">
+                                <div class="summary-stat success-stat">
+                                    <div class="stat-icon">✅</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value" id="successful-count">-</div>
+                                        <div class="stat-label">Successful</div>
+                                    </div>
+                                </div>
+                                <div class="summary-stat" id="failed-stat">
+                                    <div class="stat-icon">❌</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value" id="failed-count">-</div>
+                                        <div class="stat-label">Failed</div>
+                                    </div>
+                                </div>
+                                <div class="summary-stat">
+                                    <div class="stat-icon">📦</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value" id="total-files">-</div>
+                                        <div class="stat-label">Total Files</div>
+                                    </div>
+                                </div>
+                                <div class="summary-stat">
+                                    <div class="stat-icon">⏱️</div>
+                                    <div class="stat-content">
+                                        <div class="stat-value" id="total-time">-</div>
+                                        <div class="stat-label">Time</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Additional Info -->
+                            <div class="additional-info">
+                                <span>📊 <strong>Total Size:</strong> <span id="total-size">-</span></span>
+                                <span>🔐 <strong>Verified:</strong> All Signatures Valid</span>
+                            </div>
+
+                            <div id="results-list" class="results-list"></div>
+                        </div>
+
+                        <div class="download-actions">
+                            <button id="download-all-btn" class="primary-btn large-btn">
+                                📥 Download All Files (ZIP)
+                            </button>
+                            <button id="download-individual-btn" class="secondary-btn">
+                                📄 Download Individual Files
+                            </button>
+                            <button id="decrypt-another-btn" class="secondary-btn">
+                                🔄 Decrypt More Files
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Section -->
+                <div id="error-section" class="tool-section" style="display: none;">
+                    <div class="section-header error">
+                        <div class="error-icon">❌</div>
+                        <h2>Decryption Failed</h2>
+                        <p id="error-message">An error occurred during decryption</p>
+                    </div>
+                    
+                    <div class="error-details">
+                        <h4>⚠️ Possible Reasons:</h4>
+                        <ul>
+                            <li><strong>Wrong Private Key:</strong> The envelope wasn't encrypted for you</li>
+                            <li><strong>Signature Failed:</strong> File may be tampered or from unknown sender</li>
+                            <li><strong>Integrity Failed:</strong> Authentication tag verification failed</li>
+                            <li><strong>Invalid Envelope:</strong> Corrupted or wrong file format</li>
+                            <li><strong>Replay Attack:</strong> Nonce already used (security violation)</li>
+                        </ul>
+                    </div>
+
+                    <button id="retry-btn" class="primary-btn">
+                        🔄 Try Again
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Info Panel -->
+            <div class="info-panel">
+                <h3>🔓 How It Works</h3>
+                <p>Decrypt and verify files encrypted with our hybrid cryptography system.</p>
+                
+                <h4>Verification Steps</h4>
+                <ul>
+                    <li><strong>RSA-PSS:</strong> Verifies sender's digital signature</li>
+                    <li><strong>RSA-OAEP:</strong> Unwraps the AES key using your private key</li>
+                    <li><strong>AES-256-GCM:</strong> Decrypts file & checks integrity</li>
+                </ul>
+
+                <h3>📋 Quick Start</h3>
+                <ol>
+                    <li>Upload the encrypted envelope (.json file)</li>
+                    <li>Upload your private key</li>
+                    <li>Click decrypt to verify & unwrap</li>
+                    <li>Download your original file</li>
+                </ol>
+
+                <h3>🛡️ Security Features</h3>
+                <ul>
+                    <li>Only works with your matching private key</li>
+                    <li>Signature proves sender authenticity</li>
+                    <li>Tampering detection prevents manipulation</li>
+                    <li>All operations happen in your browser</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='decrypt.js') }}"></script>
+</body>
+</html>

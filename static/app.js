@@ -11,6 +11,10 @@ const state = {
         bob: {}
     },
     envelope: null,
+    originalEnvelope: null,  // Store original before attack
+    attackApplied: false,
+    attackType: null,
+    attackDetails: null,
     originalHash: null,
     decryptedHash: null,
     decryptedContent: null,
@@ -72,18 +76,28 @@ function initializeEventListeners() {
     // Start button
     document.getElementById('start-btn').addEventListener('click', startTransfer);
     
-    // Intercept button
-    document.getElementById('intercept-btn').addEventListener('click', openInterceptModal);
+    // Attack simulation handlers
+    const interceptBtn = document.getElementById('intercept-btn');
+    if (interceptBtn) {
+        interceptBtn.addEventListener('click', showAttackPanel);
+    }
     
-    // Attack checkboxes
-    document.querySelectorAll('.attack-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', handleAttackToggle);
+    const cancelAttackBtn = document.getElementById('cancel-attack-btn');
+    if (cancelAttackBtn) {
+        cancelAttackBtn.addEventListener('click', closeAttackModal);
+    }
+    
+    const applyAttackBtn = document.getElementById('apply-attack-btn');
+    if (applyAttackBtn) {
+        applyAttackBtn.addEventListener('click', applyAttack);
+    }
+    
+    // Radio button change handlers
+    document.querySelectorAll('input[name="attack-type"]').forEach(radio => {
+        radio.addEventListener('change', handleAttackSelection);
     });
     
-    const envelopeDownloadBtn = document.getElementById('download-envelope-btn');
-    if (envelopeDownloadBtn) {
-        envelopeDownloadBtn.addEventListener('click', downloadEnvelope);
-    }
+    // Download envelope button removed from demo
     
     const envelopeImportInput = document.getElementById('envelope-import-input');
     if (envelopeImportInput) {
@@ -136,6 +150,29 @@ function setBindingStage(stageIndex) {
     if (indicator) {
         indicator.textContent = `Stage ${stageIndex + 1} of ${bindingStageLabels.length} · ${bindingStageLabels[stageIndex]}`;
     }
+    
+    // Update exchange center icon and label based on stage
+    const exchangeIcon = document.getElementById('exchange-icon');
+    const exchangeLabel = document.getElementById('exchange-label');
+    
+    if (exchangeIcon && exchangeLabel) {
+        if (stageIndex === 3) { // Stage 4 (0-indexed as 3)
+            exchangeIcon.textContent = '⇄';
+            exchangeLabel.textContent = 'Secure Exchange';
+        } else if (stageIndex === 0) {
+            exchangeIcon.textContent = '🔓';
+            exchangeLabel.textContent = 'Public Keys';
+        } else if (stageIndex === 1) {
+            exchangeIcon.textContent = '🔢';
+            exchangeLabel.textContent = 'Hashing Keys';
+        } else if (stageIndex === 2) {
+            exchangeIcon.textContent = '✍️';
+            exchangeLabel.textContent = 'Signing Keys';
+        }
+    }
+    
+    // Update verification box based on stage
+    updateBindingVerificationUI();
 }
 
 // File Selection
@@ -481,7 +518,8 @@ function updateBindingVerificationUI() {
     
     box.classList.remove('pending', 'error');
     
-    if (aliceStatus === true && bobStatus === true) {
+    // Only show success message in stage 4 (index 3)
+    if (state.bindingStage === 3 && aliceStatus === true && bobStatus === true) {
         icon.textContent = '✅';
         title.textContent = 'Keys Successfully Bound & Verified';
         description.textContent = 'Both parties validated each other\'s encryption public keys using RSA-PSS signatures. Man-in-the-Middle attacks are prevented.';
@@ -494,7 +532,7 @@ function updateBindingVerificationUI() {
         box.classList.add('pending');
         icon.textContent = '⏳';
         title.textContent = 'Awaiting Verification';
-        description.textContent = 'Waiting for both binding signatures so we can run RSA-PSS verification for Alice and Bob.';
+        description.textContent = 'Once both parties sign each other\'s encryption public keys, we will run RSA-PSS verification to confirm authenticity.';
     }
 }
 
@@ -574,8 +612,8 @@ function displaySigning() {
     
     document.getElementById('sender-name').textContent = state.sender.charAt(0).toUpperCase() + state.sender.slice(1);
     
-    // Display envelope JSON (without signature for now)
-    const envelopeDisplay = {
+    // Display envelope components (before signature is added)
+    const envelopeBeforeSigning = {
         wrapped_key: truncateHash(state.envelope.wrapped_key),
         nonce: truncateHash(state.envelope.nonce),
         ciphertext: truncateHash(state.envelope.ciphertext) + '...',
@@ -583,15 +621,49 @@ function displaySigning() {
         filename: state.envelope.filename,
         size: state.envelope.size,
         sender: state.envelope.sender,
-        receiver: state.envelope.receiver
+        receiver: state.envelope.receiver,
+        timestamp: state.envelope.timestamp
     };
     
-    document.getElementById('envelope-json').textContent = JSON.stringify(envelopeDisplay, null, 2);
+    document.getElementById('envelope-json').textContent = JSON.stringify(envelopeBeforeSigning, null, 2);
     
-    // Show envelope hash and signature
-    const envelopeStr = JSON.stringify(state.envelope, null, 2);
-    document.getElementById('envelope-hash').textContent = 'SHA-256 hash of envelope...';
+    // Compute and show the SHA-256 hash of the envelope (before signature)
+    const envelopeJson = JSON.stringify({
+        wrapped_key: state.envelope.wrapped_key,
+        nonce: state.envelope.nonce,
+        ciphertext: state.envelope.ciphertext,
+        tag: state.envelope.tag,
+        filename: state.envelope.filename,
+        size: state.envelope.size,
+        sender: state.envelope.sender,
+        receiver: state.envelope.receiver,
+        timestamp: state.envelope.timestamp
+    }, Object.keys(envelopeBeforeSigning).sort());
+    
+    // Show a representation of the hash (in reality this is computed server-side)
+    document.getElementById('envelope-hash').textContent = 'SHA-256: ' + truncateHash('hash_of_envelope_content', 50);
+    
+    // Show the RSA-PSS signature
     document.getElementById('envelope-signature').textContent = truncateHash(state.envelope.signature);
+    
+    // Display the complete signed envelope (original envelope + signature field)
+    const signedEnvelopePreview = document.getElementById('signed-envelope-preview');
+    if (signedEnvelopePreview) {
+        // The signed envelope is the original envelope with signature appended
+        const completeEnvelope = {
+            wrapped_key: truncateHash(state.envelope.wrapped_key, 60),
+            nonce: truncateHash(state.envelope.nonce, 40),
+            ciphertext: truncateHash(state.envelope.ciphertext, 80) + '... [truncated for display]',
+            tag: truncateHash(state.envelope.tag, 40),
+            filename: state.envelope.filename,
+            size: state.envelope.size,
+            sender: state.envelope.sender,
+            receiver: state.envelope.receiver,
+            timestamp: state.envelope.timestamp,
+            signature: truncateHash(state.envelope.signature, 60)
+        };
+        signedEnvelopePreview.textContent = JSON.stringify(completeEnvelope, null, 2);
+    }
 }
 
 function downloadEnvelope() {
@@ -631,19 +703,38 @@ function startTransferAnimation() {
 // Step 7: Verify Signature
 async function verifySignature() {
     try {
-        // Display received envelope
-        const envelopeDisplay = {
-            wrapped_key: truncateHash(state.envelope.wrapped_key),
-            nonce: truncateHash(state.envelope.nonce),
-            ciphertext: truncateHash(state.envelope.ciphertext) + '...',
-            tag: truncateHash(state.envelope.tag),
+        // Display the complete received envelope (same as Step 5 signed envelope)
+        const completeEnvelope = {
+            wrapped_key: truncateHash(state.envelope.wrapped_key, 60),
+            nonce: truncateHash(state.envelope.nonce, 40),
+            ciphertext: truncateHash(state.envelope.ciphertext, 80) + '... [truncated for display]',
+            tag: truncateHash(state.envelope.tag, 40),
             filename: state.envelope.filename,
-            size: state.envelope.size
+            size: state.envelope.size,
+            sender: state.envelope.sender,
+            receiver: state.envelope.receiver,
+            timestamp: state.envelope.timestamp,
+            signature: truncateHash(state.envelope.signature, 60)
         };
         
-        document.getElementById('received-envelope').textContent = JSON.stringify(envelopeDisplay, null, 2);
-        document.getElementById('verify-sender-name').textContent = state.sender.charAt(0).toUpperCase() + state.sender.slice(1);
-        document.getElementById('verify-hash').textContent = 'SHA-256 hash recreated...';
+        document.getElementById('received-envelope').textContent = JSON.stringify(completeEnvelope, null, 2);
+        
+        // Show signature being verified
+        const verifySignatureElem = document.getElementById('verify-signature');
+        if (verifySignatureElem) {
+            verifySignatureElem.textContent = truncateHash(state.envelope.signature, 60);
+        }
+        
+        // Show hash being computed
+        document.getElementById('verify-hash').textContent = 'SHA-256: ' + truncateHash('hash_of_envelope_content', 50);
+        
+        // Update sender names
+        const senderName = state.sender.charAt(0).toUpperCase() + state.sender.slice(1);
+        document.getElementById('verify-sender-name').textContent = senderName;
+        const verifySenderName2 = document.getElementById('verify-sender-name-2');
+        if (verifySenderName2) {
+            verifySenderName2.textContent = senderName;
+        }
         
         // Verify signature
         const response = await fetch('/api/verify-signature', {
@@ -654,35 +745,144 @@ async function verifySignature() {
         
         const data = await response.json();
         
-        if (data.success && data.verified) {
+        if (data.success) {
             state.timings.verification = data.verification_time;
-            const verificationResult = document.getElementById('verification-result');
-            if (verificationResult) {
-                verificationResult.classList.remove('error');
-                verificationResult.innerHTML = `
-                    <span class="verify-status">✅ VERIFIED</span>
-                    <p>Signature is valid - envelope has not been tampered with</p>
-                    <p>Time: <span id="verify-time"></span></p>
-                `;
-            }
-            const verifyTimeElem = document.getElementById('verify-time');
-            if (verifyTimeElem) {
-                verifyTimeElem.textContent = formatTime(data.verification_time);
-            }
-        } else {
-            const verificationResult = document.getElementById('verification-result');
-            if (verificationResult) {
-                verificationResult.classList.add('error');
-                verificationResult.innerHTML = `
-                    <span class="verify-status" style="background: var(--danger-color);">❌ VERIFICATION FAILED</span>
-                    <p>Signature is invalid - envelope may have been tampered with</p>
-                `;
+            
+            // Check if attack was detected
+            if (data.attack_detected) {
+                displayAttackDetection(data);
+            } else if (data.verified) {
+                // Normal verification success - show success, hide attack alert
+                const verificationResult = document.getElementById('verification-result');
+                const attackAlert = document.getElementById('attack-detection-alert');
+                const nextBtn = document.getElementById('step-7-next-btn');
+                const restartBtn = document.getElementById('step-7-restart-btn');
+                
+                if (verificationResult) {
+                    verificationResult.style.display = 'block';
+                    verificationResult.classList.remove('error');
+                    const verifyTimeElem = document.getElementById('verify-time');
+                    if (verifyTimeElem) {
+                        verifyTimeElem.textContent = formatTime(data.verification_time);
+                    }
+                }
+                
+                if (attackAlert) {
+                    attackAlert.style.display = 'none';
+                }
+                
+                // Show Continue button, hide Restart button
+                if (nextBtn) {
+                    nextBtn.style.display = 'inline-flex';
+                }
+                if (restartBtn) {
+                    restartBtn.style.display = 'none';
+                }
+            } else {
+                // Verification failed but no specific attack detected
+                const verificationResult = document.getElementById('verification-result');
+                if (verificationResult) {
+                    verificationResult.style.display = 'block';
+                    verificationResult.classList.add('error');
+                    verificationResult.innerHTML = `
+                        <div class="verify-status-badge" style="background: var(--danger-color);">❌ VERIFICATION FAILED</div>
+                        <div class="verify-details">
+                            <p>Signature is invalid - envelope may have been tampered with</p>
+                        </div>
+                    `;
+                }
             }
         }
         
     } catch (error) {
         console.error('Error verifying signature:', error);
         alert('Failed to verify signature. Please try again.');
+    }
+}
+
+function displayAttackDetection(data) {
+    const attackAlert = document.getElementById('attack-detection-alert');
+    const verificationResult = document.getElementById('verification-result');
+    
+    // Hide the success verification result, show attack alert
+    if (verificationResult) {
+        verificationResult.style.display = 'none';
+    }
+    
+    if (attackAlert) {
+        attackAlert.style.display = 'block';
+        
+        // Populate attack details
+        const attackNameElem = document.getElementById('detected-attack-name');
+        const attackDescElem = document.getElementById('detected-attack-description');
+        const detectionMethodElem = document.getElementById('detection-method');
+        const securityImpactElem = document.getElementById('security-impact');
+        const blockedByElem = document.getElementById('blocked-by');
+        const securityRecElem = document.getElementById('security-recommendation');
+        
+        if (attackNameElem) {
+            attackNameElem.textContent = data.attack_details.attack_name;
+        }
+        
+        if (attackDescElem) {
+            attackDescElem.textContent = data.attack_details.description;
+        }
+        
+        if (detectionMethodElem) {
+            detectionMethodElem.textContent = data.attack_details.detection_method;
+        }
+        
+        if (securityImpactElem) {
+            securityImpactElem.textContent = data.attack_details.security_impact;
+        }
+        
+        if (blockedByElem) {
+            blockedByElem.textContent = data.attack_details.blocked_by;
+        }
+        
+        if (securityRecElem) {
+            securityRecElem.textContent = data.security_recommendation || 'DO NOT PROCEED TO DECRYPTION - ENVELOPE IS COMPROMISED';
+        }
+        
+        // Display tampering evidence if available
+        if (data.tampering_evidence && data.tampering_evidence.length > 0) {
+            const evidenceContainer = document.getElementById('tampering-evidence-container');
+            const evidenceList = document.getElementById('tampering-evidence-list');
+            
+            if (evidenceContainer && evidenceList) {
+                evidenceContainer.style.display = 'block';
+                evidenceList.innerHTML = '';
+                
+                data.tampering_evidence.forEach(evidence => {
+                    const evidenceDiv = document.createElement('div');
+                    evidenceDiv.className = 'evidence-item';
+                    evidenceDiv.innerHTML = `
+                        <div class="evidence-field"><strong>Field:</strong> <code>${evidence.field}</code></div>
+                        <div class="evidence-issue"><strong>Issue:</strong> ${evidence.issue}</div>
+                        ${evidence.details ? `<div class="evidence-details">${evidence.details}</div>` : ''}
+                        ${evidence.original && evidence.tampered ? `
+                            <div class="evidence-comparison">
+                                <div><strong>Expected:</strong> <code>${evidence.original}</code></div>
+                                <div><strong>Found:</strong> <code class="tampered-value">${evidence.tampered}</code></div>
+                            </div>
+                        ` : ''}
+                    `;
+                    evidenceList.appendChild(evidenceDiv);
+                });
+            }
+        }
+    }
+    
+    // Replace Continue button with Restart button
+    const nextBtn = document.getElementById('step-7-next-btn');
+    const restartBtn = document.getElementById('step-7-restart-btn');
+    
+    if (nextBtn) {
+        nextBtn.style.display = 'none';
+    }
+    
+    if (restartBtn) {
+        restartBtn.style.display = 'inline-flex';
     }
 }
 
@@ -868,82 +1068,242 @@ function displayIntegrityCheck() {
     }
 }
 
-// Intercept Modal Functions
-function openInterceptModal() {
-    const modal = document.getElementById('intercept-modal');
-    modal.classList.add('active');
-    
-    // Display intercepted envelope
-    const envelopeDisplay = {
-        wrapped_key: state.envelope.wrapped_key.substring(0, 64) + '...',
-        nonce: state.envelope.nonce,
-        ciphertext: state.envelope.ciphertext.substring(0, 128) + '...',
-        tag: state.envelope.tag,
-        aad: state.envelope.aad,
-        filename: state.envelope.filename,
-        size: state.envelope.size,
-        signature: state.envelope.signature.substring(0, 64) + '...'
-    };
-    
-    document.getElementById('intercepted-envelope').textContent = JSON.stringify(envelopeDisplay, null, 2);
+// Attack Simulation Functions
+function showAttackPanel() {
+    const modal = document.getElementById('attack-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
 }
 
-function closeInterceptModal() {
-    const modal = document.getElementById('intercept-modal');
-    modal.classList.remove('active');
+function closeAttackModal() {
+    const modal = document.getElementById('attack-modal');
+    const resultDisplay = document.getElementById('attack-result-display');
+    const attackSelection = document.getElementById('attack-type-selection');
+    const attackActions = document.getElementById('attack-actions');
     
-    // Reset attack checkboxes
-    document.querySelectorAll('.attack-checkbox').forEach(checkbox => {
-        checkbox.checked = false;
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    // Only reset if attack was not applied
+    if (!state.attackApplied) {
+        if (resultDisplay) {
+            resultDisplay.style.display = 'none';
+        }
+        
+        // Reset radio buttons
+        document.querySelectorAll('input[name="attack-type"]').forEach(radio => {
+            radio.checked = false;
+            radio.disabled = false;
+        });
+        
+        // Show attack selection
+        if (attackSelection) {
+            attackSelection.style.display = 'grid';
+        }
+        if (attackActions) {
+            attackActions.style.display = 'flex';
+        }
+        
+        // Show description
+        const panelDescription = document.querySelector('.panel-description');
+        if (panelDescription) {
+            panelDescription.style.display = 'block';
+        }
+        
+        // Reset apply button
+        const applyBtn = document.getElementById('apply-attack-btn');
+        if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.textContent = 'Apply Attack';
+        }
+    }
+}
+
+function hideAttackPanel() {
+    closeAttackModal();
+    
+    // Reset state
+    state.attackApplied = false;
+    state.attackType = null;
+    state.attackDetails = null;
+    
+    const resultDisplay = document.getElementById('attack-result-display');
+    const attackSelection = document.getElementById('attack-type-selection');
+    const attackActions = document.getElementById('attack-actions');
+    const panelDescription = document.querySelector('.panel-description');
+    
+    if (resultDisplay) {
+        resultDisplay.style.display = 'none';
+    }
+    
+    // Reset radio buttons
+    document.querySelectorAll('input[name="attack-type"]').forEach(radio => {
+        radio.checked = false;
+        radio.disabled = false;
     });
     
-    // Hide attack results
-    document.getElementById('attack-results').classList.remove('active');
-    document.getElementById('attack-results').innerHTML = '';
+    // Show attack selection
+    if (attackSelection) {
+        attackSelection.style.display = 'grid';
+    }
+    if (attackActions) {
+        attackActions.style.display = 'flex';
+    }
+    if (panelDescription) {
+        panelDescription.style.display = 'block';
+    }
+    
+    // Disable apply button
+    const applyBtn = document.getElementById('apply-attack-btn');
+    if (applyBtn) {
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Apply Attack';
+    }
 }
 
-// Handle Attack Simulation
-async function handleAttackToggle(e) {
-    const attackType = e.target.id.replace('attack-', '');
-    const resultsContainer = document.getElementById('attack-results');
+function handleAttackSelection(e) {
+    const applyBtn = document.getElementById('apply-attack-btn');
+    if (applyBtn) {
+        applyBtn.disabled = false;
+    }
+}
+
+async function applyAttack() {
+    const selectedAttack = document.querySelector('input[name="attack-type"]:checked');
     
-    if (e.target.checked) {
-        // Simulate attack
-        try {
-            const response = await fetch('/api/simulate-attack', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    attack_type: attackType,
-                    envelope: state.envelope
-                })
-            });
-            
-            const data = await response.json();
-            
-            // Display result
-            resultsContainer.classList.add('active');
-            
-            const resultItem = document.createElement('div');
-            resultItem.className = 'attack-result-item';
-            resultItem.dataset.attack = attackType;
-            resultItem.innerHTML = `
-                <h4>🛡️ ${attackType.toUpperCase()} Attack Blocked!</h4>
-                <p>${data.reason}</p>
-            `;
-            
-            resultsContainer.appendChild(resultItem);
-            
-        } catch (error) {
-            console.error('Error simulating attack:', error);
+    if (!selectedAttack) {
+        alert('Please select an attack type');
+        return;
+    }
+    
+    const attackType = selectedAttack.value;
+    
+    try {
+        // Store original envelope if not already stored
+        if (!state.originalEnvelope) {
+            state.originalEnvelope = JSON.parse(JSON.stringify(state.envelope));
         }
-    } else {
-        // Remove result for this attack
-        resultsContainer.querySelector(`[data-attack="${attackType}"]`)?.remove();
         
-        if (resultsContainer.children.length === 0) {
-            resultsContainer.classList.remove('active');
+        // Call backend to simulate attack
+        const response = await fetch('/api/simulate-attack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                attack_type: attackType,
+                envelope: state.originalEnvelope
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update envelope with attacked version
+            state.envelope = data.modified_envelope;
+            state.attackApplied = true;
+            state.attackType = attackType;
+            state.attackDetails = {
+                description: data.attack_description,
+                modifications: data.modifications
+            };
+            
+            // Hide attack selection UI
+            const attackSelection = document.getElementById('attack-type-selection');
+            const attackActions = document.getElementById('attack-actions');
+            const panelDescription = document.querySelector('.panel-description');
+            
+            if (attackSelection) {
+                attackSelection.style.display = 'none';
+            }
+            if (attackActions) {
+                attackActions.style.display = 'none';
+            }
+            if (panelDescription) {
+                panelDescription.style.display = 'none';
+            }
+            
+            // Display attack results
+            displayAttackResults(data);
+        } else {
+            throw new Error(data.error || 'Attack simulation failed');
         }
+        
+    } catch (error) {
+        console.error('Error applying attack:', error);
+        alert('Failed to apply attack: ' + error.message);
+    }
+}
+
+function displayAttackResults(data) {
+    const resultDisplay = document.getElementById('attack-result-display');
+    const attackDescription = document.getElementById('attack-description');
+    const originalEnvelopeDisplay = document.getElementById('original-envelope-display');
+    const tamperedEnvelopeDisplay = document.getElementById('tampered-envelope-display');
+    const modificationsList = document.getElementById('modifications-list');
+    
+    if (!resultDisplay) return;
+    
+    // Show result display
+    resultDisplay.style.display = 'block';
+    
+    // Set attack description
+    if (attackDescription) {
+        attackDescription.innerHTML = `<p>${data.attack_description}</p>`;
+    }
+    
+    // Display original envelope
+    if (originalEnvelopeDisplay) {
+        const originalDisplay = {
+            wrapped_key: data.original_envelope.wrapped_key.substring(0, 64) + '...',
+            nonce: data.original_envelope.nonce,
+            ciphertext: data.original_envelope.ciphertext.substring(0, 64) + '...',
+            tag: data.original_envelope.tag,
+            signature: data.original_envelope.signature.substring(0, 64) + '...'
+        };
+        originalEnvelopeDisplay.textContent = JSON.stringify(originalDisplay, null, 2);
+    }
+    
+    // Display tampered envelope with highlighted changes
+    if (tamperedEnvelopeDisplay) {
+        const tamperedDisplay = {
+            wrapped_key: data.modified_envelope.wrapped_key.substring(0, 64) + '...',
+            nonce: data.modified_envelope.nonce,
+            ciphertext: data.modified_envelope.ciphertext.substring(0, 64) + '...',
+            tag: data.modified_envelope.tag,
+            signature: data.modified_envelope.signature.substring(0, 64) + '...'
+        };
+        tamperedEnvelopeDisplay.textContent = JSON.stringify(tamperedDisplay, null, 2);
+    }
+    
+    // Display modifications list
+    if (modificationsList && data.modifications) {
+        modificationsList.innerHTML = '<h4>Specific Modifications:</h4>';
+        data.modifications.forEach(mod => {
+            const modDiv = document.createElement('div');
+            modDiv.className = 'modification-item';
+            modDiv.innerHTML = `
+                <div class="mod-header">
+                    <strong>Field Modified:</strong> <code>${mod.field}</code>
+                </div>
+                <div class="mod-description">${mod.description}</div>
+                ${mod.original !== mod.tampered ? `
+                    <div class="mod-comparison">
+                        <div class="mod-before">
+                            <span class="mod-label">Before:</span>
+                            <code>${mod.original}</code>
+                        </div>
+                        <div class="mod-after">
+                            <span class="mod-label">After:</span>
+                            <code class="tampered-value">${mod.tampered}</code>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+            modificationsList.appendChild(modDiv);
+        });
     }
 }
 
@@ -956,6 +1316,10 @@ function restartDemo() {
     state.sender = 'alice';
     state.receiver = 'bob';
     state.envelope = null;
+    state.originalEnvelope = null;
+    state.attackApplied = false;
+    state.attackType = null;
+    state.attackDetails = null;
     state.originalHash = null;
     state.decryptedHash = null;
     state.decryptedContent = null;
@@ -988,6 +1352,10 @@ function restartDemo() {
     if (statusElem) {
         statusElem.textContent = 'No envelope loaded';
     }
+    
+    // Reset attack panel
+    hideAttackPanel();
+    
     updateBindingVerificationUI();
     
     // Go back to step 0
@@ -1001,10 +1369,11 @@ function truncateKey(key) {
     return lines.join('').substring(0, 64) + '...';
 }
 
-function truncateHash(hash) {
+function truncateHash(hash, maxLength = 32) {
     if (!hash) return '';
-    if (hash.length <= 32) return hash;
-    return hash.substring(0, 16) + '...' + hash.substring(hash.length - 16);
+    if (hash.length <= maxLength) return hash;
+    const sideLength = Math.floor(maxLength / 2) - 2;
+    return hash.substring(0, sideLength) + '...' + hash.substring(hash.length - sideLength);
 }
 
 /**
@@ -1108,6 +1477,82 @@ function delay(ms) {
 window.nextStep = nextStep;
 window.previousStep = previousStep;
 window.restartDemo = restartDemo;
-window.openInterceptModal = openInterceptModal;
-window.closeInterceptModal = closeInterceptModal;
 window.toggleKeyVisibility = toggleKeyVisibility;
+window.closeAttackModal = closeAttackModal;
+
+// AES Details Modal Functions
+function showAESDetailsModal() {
+    const modal = document.getElementById('aes-details-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeAESDetailsModal(event) {
+    const modal = document.getElementById('aes-details-modal');
+    if (modal && (!event || event.target === modal || event.target.classList.contains('modal-close') || event.target.classList.contains('modal-close-btn'))) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+// RSA-OAEP Details Modal Functions
+function showRSADetailsModal() {
+    const modal = document.getElementById('rsa-details-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeRSADetailsModal(event) {
+    const modal = document.getElementById('rsa-details-modal');
+    if (modal && (!event || event.target === modal || event.target.classList.contains('modal-close') || event.target.classList.contains('modal-close-btn'))) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+// RSA-OAEP Decryption Modal Functions
+function showRSADecryptModal() {
+    const modal = document.getElementById('rsa-decrypt-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeRSADecryptModal(event) {
+    const modal = document.getElementById('rsa-decrypt-modal');
+    if (modal && (!event || event.target === modal || event.target.classList.contains('modal-close') || event.target.classList.contains('modal-close-btn'))) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+// AES-GCM Decryption Modal Functions
+function showAESDecryptModal() {
+    const modal = document.getElementById('aes-decrypt-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeAESDecryptModal(event) {
+    const modal = document.getElementById('aes-decrypt-modal');
+    if (modal && (!event || event.target === modal || event.target.classList.contains('modal-close') || event.target.classList.contains('modal-close-btn'))) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+window.showAESDetailsModal = showAESDetailsModal;
+window.closeAESDetailsModal = closeAESDetailsModal;
+window.showRSADetailsModal = showRSADetailsModal;
+window.closeRSADetailsModal = closeRSADetailsModal;
+window.showRSADecryptModal = showRSADecryptModal;
+window.closeRSADecryptModal = closeRSADecryptModal;
+window.showAESDecryptModal = showAESDecryptModal;
+window.closeAESDecryptModal = closeAESDecryptModal;
